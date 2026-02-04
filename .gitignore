@@ -1,3 +1,41 @@
+# Private/internal directories
 .worktrees/
 .private-journal/
 .claude/
+
+# Internal development documentation
+CLAUDE.md
+context.md
+docs/IMPLEMENTATION-COMPLETE.md
+
+# Test infrastructure (internal development use)
+tests/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+.cache/
+
+# OS generated files
+Thumbs.db
+Desktop.ini
