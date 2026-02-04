@@ -123,6 +123,15 @@ Fetch and follow instructions from https://raw.githubusercontent.com/obra/superp
 
 ## Philosophy
 
+**For Investigative Writing:**
+- **Fact-Checking First** - Verify claims before publishing, always
+- **Systematic over impressionistic** - Rigorous research process, not hunches
+- **Ethics by design** - Consider harm at every step
+- **Evidence over assertions** - Source everything
+- **Transparency** - Show your methodology, not just your conclusions
+- **Community-centered** - Stories serve those affected, not just audiences
+
+**For Software Development:**
 - **Test-Driven Development** - Write tests first, always
 - **Systematic over ad-hoc** - Process over guessing
 - **Complexity reduction** - Simplicity as primary goal
