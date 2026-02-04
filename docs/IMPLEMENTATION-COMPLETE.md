@@ -181,8 +181,8 @@ Successfully transformed Superpowers from a software development workflow system
 
 ## Next Steps (Optional Enhancements)
 
-1. **Create peer-scrutiny skill** - Editorial and ethical review workflow
-2. **Create using-narrative-investigator skill** - Introduction to narrative workflow
+1. ✅ **Create using-narrative-investigator skill** - Introduction to narrative workflow *(COMPLETE)*
+2. **Create peer-scrutiny skill** - Editorial and ethical review workflow
 3. **Add more examples** - Different story types (personal essay, data journalism, etc.)
 4. **Testing framework** - Validate skills with real investigative scenarios
 5. **Integration guides** - WebSearch, MuckRock, DocumentCloud connections
