@@ -21,7 +21,7 @@ Quick setup to enable superpowers skills in Github Copilot.
    ## Superpowers System
 
    <EXTREMELY_IMPORTANT>
-   You have superpowers. Superpowers teach you new skills and capabilities. RIGHT NOW run: `~/.copilot/skills/superpowers/superpowers-codex bootstrap` and follow the instructions it returns.
+   You have superpowers. Superpowers teach you new skills and capabilities. RIGHT NOW run: `~/.copilot/skills/superpowers/superpowers-copilot bootstrap` and follow the instructions it returns.
    </EXTREMELY_IMPORTANT>
    ```
 
@@ -29,7 +29,7 @@ Quick setup to enable superpowers skills in Github Copilot.
 
 Test the installation:
 ```bash
-~/.codex/superpowers/.codex/superpowers-codex bootstrap
+~/.copilot/skills/superpowers/.copilot/superpowers-copilot bootstrap
 ```
 
 You should see skill listings and bootstrap instructions. The system is now ready for use.
