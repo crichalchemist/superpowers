@@ -14,6 +14,7 @@
 **Dual-mode operation:**
 - **Dev mode**: Plans in `docs/plans/`, tests in code repos, commits tracked in git
 - **Writing mode**: Prospectuses in `writing/prospectuses/`, research in `writing/source-notes/`, drafts in `writing/drafts/`, plans in `writing/plans/`
+- **Voice context**: Personal writing personality in `skills/writing-personality/` (gitignored) - Narrator agent references for authentic voice
 - Both modes use the same skill architecture and subagent orchestration patterns
 
 **Skill invocation flow:** Session starts → `hooks/session-start.sh` runs → injects skill descriptions → Claude matches trigger conditions → uses Skill tool → follows instructions exactly.
@@ -95,7 +96,7 @@ Key principles: YAGNI (You Aren't Gonna Need It), DRY (Don't Repeat Yourself), 2
 - **Archivist**: Historical records, archives, public documents (uses Graph of Thoughts methodology)
 - **Analyst**: Data analysis, financial flows, pattern recognition
 - **Ethicist**: Harm assessment, positionality, ethical considerations
-- **Narrator**: Storytelling, narrative structure, voice
+- **Narrator**: Storytelling, narrative structure, voice (references `skills/writing-personality/` for authentic voice if available)
 - **Skeptic**: Claims verification, logical fallacies, counterarguments
 - **Community Listener**: Missing voices, power dynamics, community impact
 - **Fact-Checker**: Source verification, citation accuracy, claim validation

@@ -9,6 +9,8 @@ description: "Execute research and writing plans with specialist agents for each
 
 This skill coordinates specialist agents to execute research and writing plans. Each task is handled by a fresh agent with the right expertise (Archivist for records, Analyst for data, etc.), then fact-checked and ethically reviewed before proceeding.
 
+**Voice Context:** If `skills/writing-personality/` exists, the Narrator agent references these files to match your authentic voice during drafting.
+
 **Announce at start:** "I'm using evidence-driven-drafting to research and write this story task-by-task."
 
 ## Workflow

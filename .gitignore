@@ -3,6 +3,9 @@
 .private-journal/
 .claude/
 
+# Personal writing personality/voice (user-specific, not plugin)
+skills/writing-personality/
+
 # Internal development documentation
 CLAUDE.md
 context.md

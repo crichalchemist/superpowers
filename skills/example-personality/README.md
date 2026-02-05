@@ -1,8 +1,15 @@
-# Writing Personality Template
+# Example Writing Personality
 
-**Location:** Copy this template to `skills/writing-personality/` (excluded from git)
+**This is a sample/example directory tracked in git** to show users how to set up their own writing voice reference files.
 
-This directory preserves your writing voice, style evolution, and authorial identity for the Narrator agent to reference during investigative/creative nonfiction drafting.
+**To use:** Copy this directory to `skills/writing-personality/` (which is gitignored for privacy):
+
+```bash
+cp -r skills/example-personality skills/writing-personality
+# Then edit the files to reflect YOUR voice
+```
+
+This directory preserves writing voice, style evolution, and authorial identity for the Narrator agent to reference during investigative/creative nonfiction drafting.
 
 ## Purpose
 
@@ -52,9 +59,9 @@ Historical development:
 
 ## Getting Started
 
-1. **Copy this template:**
+1. **Copy this example:**
    ```bash
-   cp -r skills/writing-personality.template skills/writing-personality
+   cp -r skills/example-personality skills/writing-personality
    ```
 
 2. **Start with style-analysis.md:**
@@ -81,6 +88,8 @@ When the Narrator reviews your drafts:
 ## Privacy Note
 
 `skills/writing-personality/` is in `.gitignore` - your voice files stay local and private.
+
+**Note:** This `skills/example-personality/` directory is tracked in git as a reference example for other users.
 
 ## Example: Minimal Setup
 
