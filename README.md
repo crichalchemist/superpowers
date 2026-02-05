@@ -119,8 +119,7 @@ Fetch and follow instructions from https://raw.githubusercontent.com/obra/superp
 
 **Meta**
 - **writing-skills** - Create new skills following best practices (includes testing methodology)
-- **using-superpowers** - Introduction to the skills system for software development
-- **using-narrative-investigator** - Introduction to the skills system for investigative journalism
+- **using-superpowers** - Introduction to the skills system for both software development and investigative journalism
 
 ## Philosophy
 
