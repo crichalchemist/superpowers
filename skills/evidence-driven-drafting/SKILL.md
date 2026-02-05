@@ -42,15 +42,37 @@ For Task [N]: [Title]
 
 **Specialist needed:** [Archivist/Analyst/Ethicist/Narrator/Skeptic/Community-Listener]
 
-**Prompt:**
-[Include complete task description from plan, expected sources, output format]
-[Reference: skills/evidence-driven-drafting/researcher-prompt.md]
+**Dispatch subagent with appropriate prompt:**
+- Archivist: ./archivist-prompt.md (primary sources, archives, Graph of Thoughts)
+- Analyst: ./analyst-prompt.md (data analysis, patterns, financial flows)
+- Ethicist: ./ethicist-prompt.md (harm assessment, positionality)
+- Narrator: ./narrator-prompt.md (storytelling, voice, narrative structure)
+- Skeptic: ./skeptic-prompt.md (claims verification, counterarguments)
+- Community Listener: ./community-listener-prompt.md (missing voices, power dynamics)
+
+**Include in prompt:**
+- Complete task description from plan
+- Expected sources and output format
+- Research question or drafting goal
 
 **After research:**
-- Fact-check with Fact-Checker agent
-- If draft involves people: Ethical review
+- Fact-check with ./fact-checker-prompt.md
+- If draft involves people: Ethical review with ./ethical-reviewer-prompt.md
 - Save with sources
 ```
+
+## Prompt Files
+
+Located in this skill directory:
+- `./archivist-prompt.md` - Historical records, archives, primary sources specialist
+- `./analyst-prompt.md` - Data analysis, financial flows, pattern recognition specialist
+- `./ethicist-prompt.md` - Harm assessment, positionality, ethical considerations specialist
+- `./narrator-prompt.md` - Storytelling, narrative structure, voice specialist
+- `./skeptic-prompt.md` - Claims verification, logical fallacies, counterarguments specialist
+- `./community-listener-prompt.md` - Missing voices, power dynamics, community impact specialist
+- `./fact-checker-prompt.md` - Source verification, citation accuracy, claim validation
+- `./ethical-reviewer-prompt.md` - Post-draft ethical review (harm, representation)
+- `./researcher-prompt.md` - Generic template (deprecated - use specific prompts above)
 
 ## Progress Tracking
 
