@@ -1,6 +1,6 @@
 ---
 name: using-superpowers
-description: Use when starting any conversation - establishes how to find and use skills, requiring Skill tool invocation before ANY response including clarifying questions
+description: Use when starting any conversation - establishes how to find and use skills for both code development and investigative writing, requiring Skill tool invocation before ANY response
 ---
 
 <EXTREMELY-IMPORTANT>
@@ -54,7 +54,9 @@ These thoughts mean STOP—you're rationalizing:
 | "This is just a simple question" | Questions are tasks. Check for skills. |
 | "I need more context first" | Skill check comes BEFORE clarifying questions. |
 | "Let me explore the codebase first" | Skills tell you HOW to explore. Check first. |
+| "Let me search for sources first" | Skills tell you HOW to search rigorously. Check first. |
 | "I can check git/files quickly" | Files lack conversation context. Check for skills. |
+| "I can make this claim quickly" | Claims need sources. Use fact-check-driven-revision. |
 | "Let me gather information first" | Skills tell you HOW to gather information. |
 | "This doesn't need a formal skill" | If a skill exists, use it. |
 | "I remember this skill" | Skills evolve. Read current version. |
@@ -68,11 +70,18 @@ These thoughts mean STOP—you're rationalizing:
 
 When multiple skills could apply, use this order:
 
-1. **Process skills first** (brainstorming, debugging) - these determine HOW to approach the task
-2. **Implementation skills second** (frontend-design, mcp-builder) - these guide execution
+1. **Process skills first** (brainstorming) - determines whether code or story, then HOW to approach
+2. **Planning skills second** (writing-plans, narrative:story-plan) - break work into tasks  
+3. **Execution skills third** (subagent-driven-development, narrative:evidence-driven-drafting) - implement/research
+4. **Verification always** (test-driven-development, narrative:fact-check-driven-revision) - verify before claims
 
-"Let's build X" → brainstorming first, then implementation skills.
-"Fix this bug" → debugging first, then domain-specific skills.
+**Examples:**
+
+*Code:* "Let's build X" → brainstorming → writing-plans → subagent-driven-development + test-driven-development
+
+*Story:* "I noticed something strange" → brainstorming → narrative:story-plan → narrative:evidence-driven-drafting + narrative:fact-check-driven-revision
+
+*Bug:* "Fix this bug" → systematic-debugging → test-driven-development
 
 ## Skill Types
 
