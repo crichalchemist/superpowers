@@ -1,96 +1,125 @@
 ---
 name: brainstorming
-description: "You MUST use this before any creative work - creating features, building components, adding functionality, or modifying behavior. Explores user intent, requirements and design before implementation."
+description: "You MUST use this before any creative work - software features, investigative stories, code components, or written narratives. Explores intent through dialogue, then hands off to appropriate workflow."
 ---
 
-# Brainstorming Ideas Into Designs
+# Brainstorming Ideas Into Plans
 
 ## Overview
 
-Help turn ideas into fully formed designs and specs through natural collaborative dialogue.
+Help turn ideas into fully formed designs (code) or prospectuses (writing) through natural collaborative dialogue.
 
-Start by understanding the current project context, then ask questions one at a time to refine the idea. Once you understand what you're building, present the design and get user approval.
+**First question (always):** "Are we building **code** or exploring a **story/investigation**?"
 
-<HARD-GATE>
-Do NOT invoke any implementation skill, write any code, scaffold any project, or take any implementation action until you have presented a design and the user has approved it. This applies to EVERY project regardless of perceived simplicity.
-</HARD-GATE>
+Based on direction, adapt the process to either:
+- **Code**: Technical design → implementation plan
+- **Story**: Narrative prospectus → research/drafting plan
 
-## Anti-Pattern: "This Is Too Simple To Need A Design"
-
-Every project goes through this process. A todo list, a single-function utility, a config change — all of them. "Simple" projects are where unexamined assumptions cause the most wasted work. The design can be short (a few sentences for truly simple projects), but you MUST present it and get approval.
-
-## Checklist
-
-You MUST create a task for each of these items and complete them in order:
-
-1. **Explore project context** — check files, docs, recent commits
-2. **Ask clarifying questions** — one at a time, understand purpose/constraints/success criteria
-3. **Propose 2-3 approaches** — with trade-offs and your recommendation
-4. **Present design** — in sections scaled to their complexity, get user approval after each section
-5. **Write design doc** — save to `docs/plans/YYYY-MM-DD-<topic>-design.md` and commit
-6. **Transition to implementation** — invoke writing-plans skill to create implementation plan
-
-## Process Flow
-
-```dot
-digraph brainstorming {
-    "Explore project context" [shape=box];
-    "Ask clarifying questions" [shape=box];
-    "Propose 2-3 approaches" [shape=box];
-    "Present design sections" [shape=box];
-    "User approves design?" [shape=diamond];
-    "Write design doc" [shape=box];
-    "Invoke writing-plans skill" [shape=doublecircle];
-
-    "Explore project context" -> "Ask clarifying questions";
-    "Ask clarifying questions" -> "Propose 2-3 approaches";
-    "Propose 2-3 approaches" -> "Present design sections";
-    "Present design sections" -> "User approves design?";
-    "User approves design?" -> "Present design sections" [label="no, revise"];
-    "User approves design?" -> "Write design doc" [label="yes"];
-    "Write design doc" -> "Invoke writing-plans skill";
-}
-```
-
-**The terminal state is invoking writing-plans.** Do NOT invoke frontend-design, mcp-builder, or any other implementation skill. The ONLY skill you invoke after brainstorming is writing-plans.
+Present refined concepts in small sections (200-300 words), checking after each section whether it captures the vision correctly.
 
 ## The Process
 
-**Understanding the idea:**
-- Check out the current project state first (files, docs, recent commits)
-- Ask questions one at a time to refine the idea
-- Prefer multiple choice questions when possible, but open-ended is fine too
-- Only one question per message - if a topic needs more exploration, break it into multiple questions
-- Focus on understanding: purpose, constraints, success criteria
+### Path Selection
 
-**Exploring approaches:**
-- Propose 2-3 different approaches with trade-offs
+**First, determine direction:**
+- "Are we building **code** or exploring a **story/investigation**?"
+
+Then adapt all subsequent questions based on the answer.
+
+### Understanding the Idea
+
+**For CODE:**
+- Check current project state (files, docs, recent commits)
+- Ask questions one at a time: purpose, constraints, success criteria
+- Focus on: architecture, data flow, edge cases, testing
+
+**For STORY/INVESTIGATION:**
+- Ask what they've observed or are curious about
+- Ask questions one at a time: personal stake, systemic patterns, who benefits/suffers, what's hidden
+- Focus on: thesis, key actors, timeline, research gaps, ethical considerations
+
+**Both paths:**
+- One question per message
+- Prefer multiple choice when possible, open-ended is fine too
+- If a topic needs more exploration, break into multiple questions
+
+### Exploring Approaches
+
+**For CODE:**
+- Propose 2-3 different technical approaches with trade-offs
 - Present options conversationally with your recommendation and reasoning
 - Lead with your recommended option and explain why
+- Apply YAGNI ruthlessly - remove unnecessary features
 
-**Presenting the design:**
-- Once you believe you understand what you're building, present the design
-- Scale each section to its complexity: a few sentences if straightforward, up to 200-300 words if nuanced
+**For STORY/INVESTIGATION:**
+- Propose 2-3 different narrative frames with trade-offs:
+  - Personal essay (intimate, limited scope, accessible)
+  - Investigative feature (rigorous, broad, requires extensive sourcing)
+  - Hybrid narrative investigation (personal entry point, systemic analysis)
+- Present options conversationally with your recommendation
+- Lead with your recommended approach and explain why
+
+### Presenting the Concept
+
+**For CODE (design):**
+- Once you understand what you're building, present the design
+- Break it into sections of 200-300 words
 - Ask after each section whether it looks right so far
 - Cover: architecture, components, data flow, error handling, testing
 - Be ready to go back and clarify if something doesn't make sense
 
-## After the Design
+**For STORY/INVESTIGATION (prospectus):**
+- Once you understand the investigation, present the prospectus
+- Break it into sections of 200-300 words
+- Ask after each section whether it captures the story correctly
+- Cover:
+  - **Thesis**: What are you arguing or revealing?
+  - **Personal stake**: Why you, why now?
+  - **Key actors**: Who benefits? Who's harmed? Who's invisible?
+  - **Timeline**: Critical moments and turning points
+  - **Research gaps**: What you need to find out
+  - **Ethical considerations**: Potential harm, positionality, responsibility
+  - **Narrative arc**: How the story unfolds (question → discovery → confrontation → insight)
+- Be ready to go back and clarify if something doesn't resonate
+
+## After Validation
+
+### For CODE Development
 
 **Documentation:**
 - Write the validated design to `docs/plans/YYYY-MM-DD-<topic>-design.md`
-- Use elements-of-style:writing-clearly-and-concisely skill if available
 - Commit the design document to git
 
-**Implementation:**
-- Invoke the writing-plans skill to create a detailed implementation plan
-- Do NOT invoke any other skill. writing-plans is the next step.
+**Implementation handoff:**
+- Ask: "Ready to set up for implementation?"
+- Use superpowers:using-git-worktrees to create isolated workspace
+- Use superpowers:writing-plans to create detailed implementation plan
+
+### For STORY/INVESTIGATION
+
+**Documentation:**
+- Write the validated prospectus to `writing/prospectuses/YYYY-MM-DD-<story-slug>.md`
+- Commit the prospectus (or save with timestamp if not using git)
+
+**Research planning handoff:**
+- Ask: "Ready to plan the research and drafting process?"
+- Use superpowers:story-plan to create detailed research and writing plan
+- Consider which specialist agents to invoke: Archivist, Analyst, Ethicist, Narrator, Skeptic, Community Listener
 
 ## Key Principles
 
+**Universal (both paths):**
 - **One question at a time** - Don't overwhelm with multiple questions
 - **Multiple choice preferred** - Easier to answer than open-ended when possible
-- **YAGNI ruthlessly** - Remove unnecessary features from all designs
 - **Explore alternatives** - Always propose 2-3 approaches before settling
-- **Incremental validation** - Present design, get approval before moving on
+- **Incremental validation** - Present concept in sections, validate each
 - **Be flexible** - Go back and clarify when something doesn't make sense
+
+**Code-specific:**
+- **YAGNI ruthlessly** - Remove unnecessary features from all designs
+
+**Story-specific:**
+- **Personal → Structural** - Start with lived experience, zoom out to systems
+- **Ethics first** - Always consider who might be harmed
+- **Sources before claims** - Identify research gaps explicitly
+- **Writer as investigator** - Not omniscient narrator, but curious witness
