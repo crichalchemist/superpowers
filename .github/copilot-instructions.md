@@ -143,9 +143,12 @@ cd tests/claude-code
 
 ## Cross-Platform Support
 
-- **Claude Code**: Primary platform (uses `plugin.json`, hooks)
+- **Claude Code**: Primary platform (uses `.claude-plugin/plugin.json`, hooks)
+- **GitHub Copilot**: Reads `.github/copilot-instructions.md` automatically from repo
+- **Cursor**: Uses `.cursor-plugin/plugin.json` for plugin discovery
 - **Codex**: See `.codex/INSTALL.md` and `docs/README.codex.md`
 - **OpenCode**: See `.opencode/INSTALL.md` and `docs/README.opencode.md`
+- **Gemini Code Assist**: Uses `.gemini/styleguide.md` for coding conventions
 
 ## Creating New Skills
 

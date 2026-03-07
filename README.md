@@ -1,6 +1,6 @@
 # Superpowers
 
-Superpowers is a complete software development workflow for your coding agents, built on top of a set of composable "skills" and some initial instructions that make sure your agent uses them.
+Superpowers is a dual-mode workflow for your coding agents — software development AND investigative journalism — built on composable "skills" and initial instructions that make sure your agent uses them.
 
 ## How it works
 
@@ -26,7 +26,7 @@ Thanks!
 
 ## Installation
 
-**Note:** Installation differs by platform. Claude Code or Cursor have built-in plugin marketplaces. Codex and OpenCode require manual setup.
+**Note:** Installation differs by platform. Claude Code or Cursor have built-in plugin marketplaces. Codex, OpenCode, and Gemini require manual setup or read config from the repo.
 
 
 ### Claude Code (via Plugin Marketplace)
@@ -56,7 +56,7 @@ In Cursor Agent chat, install from marketplace:
 Tell Codex:
 
 ```
-Fetch and follow instructions from https://raw.githubusercontent.com/obra/superpowers/refs/heads/main/.codex/INSTALL.md
+Fetch and follow instructions from https://raw.githubusercontent.com/crichalchemist/superpowers/refs/heads/main/.codex/INSTALL.md
 ```
 
 **Detailed docs:** [docs/README.codex.md](docs/README.codex.md)
@@ -66,10 +66,18 @@ Fetch and follow instructions from https://raw.githubusercontent.com/obra/superp
 Tell OpenCode:
 
 ```
-Fetch and follow instructions from https://raw.githubusercontent.com/obra/superpowers/refs/heads/main/.opencode/INSTALL.md
+Fetch and follow instructions from https://raw.githubusercontent.com/crichalchemist/superpowers/refs/heads/main/.opencode/INSTALL.md
 ```
 
 **Detailed docs:** [docs/README.opencode.md](docs/README.opencode.md)
+
+### GitHub Copilot
+
+Copilot reads `.github/copilot-instructions.md` automatically from any repo that includes it. Clone this repo (or add it as a submodule) and Copilot picks up the skill conventions.
+
+### Gemini Code Assist
+
+Gemini reads `.gemini/styleguide.md` automatically from any repo that includes it. Clone this repo (or add it as a submodule) and Gemini picks up the skill conventions and coding standards.
 
 ### Verify Installation
 
@@ -115,6 +123,13 @@ Start a new session in your chosen platform and ask for something that should tr
 - **finishing-a-development-branch** - Merge/PR decision workflow
 - **subagent-driven-development** - Fast iteration with two-stage review (spec compliance, then code quality)
 
+**Investigative Writing**
+- **interrogate** - Develop story prospectus through Socratic questioning
+- **story-plan** - Break investigation into research and drafting tasks
+- **evidence-driven-drafting** - Dispatch specialist agents (Archivist, Analyst, Ethicist, Narrator, Skeptic, Community Listener, Fact-Checker)
+- **fact-check-driven-revision** - CLAIM-CHECK-REVISE cycle (parallel to TDD for claims)
+- **example-personality** - Template for preserving authentic writing voice
+
 **Meta**
 - **writing-skills** - Create new skills following best practices (includes testing methodology)
 - **using-superpowers** - Introduction to the skills system
@@ -122,6 +137,7 @@ Start a new session in your chosen platform and ask for something that should tr
 ## Philosophy
 
 - **Test-Driven Development** - Write tests first, always
+- **Fact-Check-Driven Revision** - Source claims first, always
 - **Systematic over ad-hoc** - Process over guessing
 - **Complexity reduction** - Simplicity as primary goal
 - **Evidence over claims** - Verify before declaring success
@@ -153,5 +169,5 @@ MIT License - see LICENSE file for details
 
 ## Support
 
-- **Issues**: https://github.com/obra/superpowers/issues
+- **Issues**: https://github.com/crichalchemist/superpowers/issues
 - **Marketplace**: https://github.com/obra/superpowers-marketplace
