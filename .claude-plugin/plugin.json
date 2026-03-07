@@ -6,12 +6,6 @@
     "name": "Jesse Vincent",
     "email": "jesse@fsck.com"
   },
-  "contributors": [
-    {
-      "name": "crichalchemist",
-      "url": "https://github.com/crichalchemist"
-    }
-  ],
   "homepage": "https://github.com/crichalchemist/superpowers",
   "repository": "https://github.com/crichalchemist/superpowers",
   "license": "MIT",
