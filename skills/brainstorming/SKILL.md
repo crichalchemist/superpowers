@@ -28,6 +28,7 @@ You MUST create a task for each of these items and complete them in order:
 5. **Present design** — in sections scaled to their complexity, get user approval after each section
 6. **Write design doc** — save to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` and commit
 7. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
+7b. **Supercritic (if accepted)** — after self-review, run the configured supercritic and address findings
 8. **User reviews written spec** — ask user to review the spec file before proceeding
 9. **Transition to implementation** — invoke writing-plans skill to create implementation plan
 
@@ -42,6 +43,7 @@ digraph brainstorming {
     "User approves design?" [shape=diamond];
     "Write design doc" [shape=box];
     "Spec self-review\n(fix inline)" [shape=box];
+    "Supercritic\n(if configured)" [shape=box];
     "User reviews spec?" [shape=diamond];
     "Invoke writing-plans skill" [shape=doublecircle];
 
@@ -52,7 +54,8 @@ digraph brainstorming {
     "User approves design?" -> "Present design sections" [label="no, revise"];
     "User approves design?" -> "Write design doc" [label="yes"];
     "Write design doc" -> "Spec self-review\n(fix inline)";
-    "Spec self-review\n(fix inline)" -> "User reviews spec?";
+    "Spec self-review\n(fix inline)" -> "Supercritic\n(if configured)";
+    "Supercritic\n(if configured)" -> "User reviews spec?";
     "User reviews spec?" -> "Write design doc" [label="changes requested"];
     "User reviews spec?" -> "Invoke writing-plans skill" [label="approved"];
 }
@@ -157,3 +160,43 @@ A question about a UI topic is not automatically a visual question. "What does p
 
 If they agree to the companion, read the detailed guide before proceeding:
 `skills/brainstorming/visual-companion.md`
+
+## Supercritic (independent different-model review)
+
+Models are partial to their own work, so an independent review by a *different
+model* catches what self-review waves through. The supercritic is opt-in and
+set up once per project.
+
+**Offering it (just-in-time):** the first time you are about to run a
+self-review (spec self-review, checklist item 7), if no `.superpowers/supercritic.conf`
+exists yet, offer it — as **its own message**, nothing else:
+
+> "Before I self-review, one option: route this to an independent **supercritic** —
+> a different AI model than me — for a second opinion. It's a one-time per-project
+> setup: I detect which AI CLIs you have, recommend one from a different model
+> family, you pick, and I wire + smoke-test it. Want me to set that up?"
+
+If they decline: write `SUPERCRITIC_ENABLED=0` to `.superpowers/supercritic.conf`
+and proceed; do not re-offer.
+
+If they accept, run **setup**:
+1. Resolve the detector path from the base directory the harness announced for
+   this skill: `DETECT="<skill-base-dir>/../../scripts/detect-supercritic.sh"`.
+   Run `"$DETECT"` and present the installed CLIs. Establish each one's backing
+   model by asking (the binary name does not reveal it). Recommend one from a
+   **different model family than the running harness** — recommending a
+   Claude-backed CLI while running in Claude Code defeats the purpose.
+2. On the user's choice, confirm its headless invocation against
+   `<skill-base-dir>/../../scripts/supercritic-clis.md` and the CLI's own `--help`.
+3. Write `.superpowers/supercritic.conf` with `SUPERCRITIC_CMD=(chosen-cmd args...)`,
+   `SUPERCRITIC_ENABLED=1`, `SUPERCRITIC_MODEL`, and `SUPERCRITIC_VERIFIED=0`.
+4. **Smoke-test:** resolve the engine: `ENGINE="<skill-base-dir>/../../scripts/supercritic.sh"`.
+   Run: `echo "smoke test: reply OK" | "$ENGINE" "smoke" -`. Confirm it
+   returns within the timeout (default 120 s) and does not hang. Only then set
+   `SUPERCRITIC_VERIFIED=1`.
+5. Ensure `.superpowers/` is in the project's `.gitignore`.
+
+Once configured, after the spec self-review, resolve the engine path
+(`ENGINE="<skill-base-dir>/../../scripts/supercritic.sh"`) and run:
+`"$ENGINE" "Design spec: architecture, risks, testability" docs/superpowers/specs/<file>.md`
+Address its findings before the user-review gate.
