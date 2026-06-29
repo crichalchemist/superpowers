@@ -48,7 +48,7 @@ timeout_secs=${SUPERCRITIC_TIMEOUT:-120}
 if [ "$src" = "-" ]; then
   content=$(cat)
 else
-  [ -f "$src" ] || die "no such file: $src"
+  [ -f "$src" ] || { echo "supercritic: no such file: $src" >&2; exit 2; }
   content=$(cat "$src")
 fi
 

@@ -47,10 +47,6 @@ exit 3
 STUB
 chmod +x "$TEST_ROOT/fail-cli"
 
-write_conf() { # $1 = conf path, $2 = cmd-array literal, rest sourced as-is
-  cat >"$1"
-}
-
 echo "supercritic engine tests"
 
 # --- happy path: prints the review, passes focus+content through ---
@@ -109,6 +105,37 @@ elapsed=$(( $(date +%s) - start ))
 assert_status "$rc" 1 "timeout exits 1"
 assert_contains "$out" "timed out" "timeout message"
 if [ "$elapsed" -le 5 ]; then pass "timeout fires fast (<=5s)"; else fail "timeout too slow (${elapsed}s)"; fi
+
+# --- unverified conf: fail loud, exit 1 ---
+cat >"$TEST_ROOT/unverified.conf" <<CONF
+SUPERCRITIC_CMD=("$TEST_ROOT/echo-cli")
+SUPERCRITIC_ENABLED=1
+SUPERCRITIC_VERIFIED=0
+CONF
+out=$(SUPERCRITIC_CONF="$TEST_ROOT/unverified.conf" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 1 "unverified conf exits 1"
+assert_contains "$out" "not verified" "unverified conf message"
+
+# --- empty SUPERCRITIC_CMD: fail loud, exit 1 ---
+cat >"$TEST_ROOT/emptycmd.conf" <<CONF
+SUPERCRITIC_CMD=()
+SUPERCRITIC_ENABLED=1
+SUPERCRITIC_VERIFIED=1
+CONF
+out=$(SUPERCRITIC_CONF="$TEST_ROOT/emptycmd.conf" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 1 "empty SUPERCRITIC_CMD exits 1"
+assert_contains "$out" "SUPERCRITIC_CMD" "empty cmd message mentions SUPERCRITIC_CMD"
+
+# --- missing file: fail loud, exit 2 ---
+cat >"$TEST_ROOT/ok2.conf" <<CONF
+SUPERCRITIC_CMD=("$TEST_ROOT/echo-cli")
+SUPERCRITIC_ENABLED=1
+SUPERCRITIC_VERIFIED=1
+SUPERCRITIC_TIMEOUT=10
+CONF
+out=$(SUPERCRITIC_CONF="$TEST_ROOT/ok2.conf" "$ENGINE" "f" "$TEST_ROOT/does-not-exist.txt" 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 2 "missing file exits 2"
+assert_contains "$out" "no such file" "missing file message"
 
 if [ "$FAILURES" -gt 0 ]; then echo "$FAILURES supercritic engine test(s) failed"; exit 1; fi
 echo "All supercritic engine tests passed"
