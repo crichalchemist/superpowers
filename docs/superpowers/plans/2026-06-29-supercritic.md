@@ -17,15 +17,18 @@
 - **Detection never executes a candidate CLI and never installs anything** — pure `PATH` lookup only.
 - **`.superpowers/` is gitignored** (already the convention for visual-companion mockups).
 - **Conf contract (verbatim across all tasks):** a bash-sourceable file setting `SUPERCRITIC_CMD` (bash array, e.g. `SUPERCRITIC_CMD=(agy --print)`), `SUPERCRITIC_ENABLED` (`1`/`0`), `SUPERCRITIC_VERIFIED` (`1`/`0`), optional `SUPERCRITIC_TIMEOUT` (seconds, default `120`), optional `SUPERCRITIC_MODEL` (informational). Engine reads `$SUPERCRITIC_CONF` else `./.superpowers/supercritic.conf`.
-- **Script-path resolution (RESOLVED in Task 1):** `${CLAUDE_PLUGIN_ROOT}` is **unset** in skill bash context, so skill prose must NOT use it. The engine/detector live at the plugin **root** `scripts/` (shared across skills). Skill prose instructs the agent to build an **absolute** path from the skill's announced base directory — plugin root = the skill base dir's grandparent (`skills/<name>/` → plugin root) — and invoke `"<plugin-root>/scripts/supercritic.sh"` with CWD left at the user's project (so `./.superpowers/...` and artifact paths resolve). In Tasks 5–6, `<ENGINE>` / `<DETECT>` denote those absolute paths the agent constructs this way (not an env var). Tests are unaffected — they compute `REPO_ROOT` from the test file's own location.
+- **Script-path resolution (RESOLVED in Task 1; location revised in Task 8):** `${CLAUDE_PLUGIN_ROOT}` is **unset** in skill bash context, so skill prose must NOT use it. The engine/detector/clis-doc live with the owning skill's assets at **`skills/brainstorming/scripts/`** (mirroring the visual-companion scripts, the only precedent for skill-invoked runtime scripts). Each skill resolves the engine from its OWN announced base directory:
+  - **brainstorming** (owner): `ENGINE="$SKILL_BASE/scripts/supercritic.sh"`; siblings `DETECT`/`CLIS_DOC` are in the same dir.
+  - **writing-plans / requesting-code-review** (consumers): `ENGINE="$SKILL_BASE/../brainstorming/scripts/supercritic.sh"`.
+  - **Fallback** (announcement missing): `ENGINE=$(find ~/.claude/plugins -path '*brainstorming/scripts/supercritic.sh' 2>/dev/null | head -1)`, then derive siblings from `dirname "$ENGINE"` (no `../..` arithmetic — this avoids the off-by-one the first layout risked). CWD stays at the user's project so `./.superpowers/...` and artifact paths resolve. Tests reference the engine via `$REPO_ROOT/skills/brainstorming/scripts/...`.
 
 ---
 
 ## File Structure
 
-- `scripts/supercritic.sh` — **new.** The engine. Sources conf, builds prompt, runs timeout-guarded CLI. Sole responsibility: safely run the configured critic on supplied text.
-- `scripts/detect-supercritic.sh` — **new.** The reporter. Lists installed candidate CLIs + running harness. No execution, no decisions.
-- `scripts/supercritic-clis.md` — **new.** Guidance-only reference of known CLIs' headless invocations (incl. the retired `agy` preset). Explicitly "verify before trusting."
+- `skills/brainstorming/scripts/supercritic.sh` — **new.** The engine. Sources conf, builds prompt, runs timeout-guarded CLI. Sole responsibility: safely run the configured critic on supplied text. (Lives with the owning skill's assets; relocated from plugin-root `scripts/` in Task 8.)
+- `skills/brainstorming/scripts/detect-supercritic.sh` — **new.** The reporter. Lists installed candidate CLIs + running harness. No execution, no decisions.
+- `skills/brainstorming/scripts/supercritic-clis.md` — **new.** Guidance-only reference of known CLIs' headless invocations (incl. the retired `agy` preset). Explicitly "verify before trusting."
 - `scripts/agy-review.sh` — **removed** (folded into the engine + `agy` preset in the reference).
 - `tests/supercritic/test-supercritic.sh` — **new.** Engine behavior vs. stub CLIs.
 - `tests/supercritic/test-detect-supercritic.sh` — **new.** Detector vs. fake PATH + env.
@@ -603,7 +606,7 @@ After your self-review, check `.superpowers/supercritic.conf`:
 ## Supercritic (if configured)
 
 After assembling the review, check `.superpowers/supercritic.conf`. If enabled + verified, also get an independent different-model pass on the diff:
-`git diff <base>...HEAD | <ENGINE> "Code review this diff" -` and incorporate findings. If `SUPERCRITIC_ENABLED=0`, skip. If no conf exists, offer the one-time setup (brainstorming "Supercritic" section) first.
+`git diff <base>..HEAD | <ENGINE> "Code review this diff" -` and incorporate findings. (Two-dot to match the repo's existing code-review tooling — `code-reviewer.md`, `task-reviewer-prompt.md`, and `review-package` all use `<base>..<head>` — so the supercritic reviews the same diff the human/other reviewers see.) If `SUPERCRITIC_ENABLED=0`, skip. If no conf exists **or it exists but is not verified**, offer the one-time setup (brainstorming "Supercritic" section) first.
 ```
 
 - [ ] **Step 3: Manual verification**
@@ -619,39 +622,74 @@ git commit -m "feat(supercritic): consume hooks in writing-plans and code-review
 
 ---
 
-### Task 7: Align the other template scripts + `.gitignore`
+### Task 7: Make OUR scripts conform to the existing house style + `.gitignore`
 
-Honor the twice-stated "review all the other template scripts to be in alignment." Light review-and-touch-up only — no behavior changes. Exploration found they largely conform already; `sync-to-codex-plugin.sh` is missing `set -euo pipefail`.
+**Direction (user clarification):** make the NEW supercritic scripts fall in line with everything
+else in the repo — do NOT modify the pre-existing scripts to match ours. `scripts/bump-version.sh`,
+`scripts/lint-shell.sh`, and `scripts/sync-to-codex-plugin.sh` are working, reviewed code; leave
+them untouched. This task audits only what this branch added.
 
 **Files:**
-- Modify (only where divergent): `scripts/bump-version.sh`, `scripts/lint-shell.sh`, `scripts/sync-to-codex-plugin.sh`
+- Modify (only where divergent from house style): `scripts/supercritic.sh`, `scripts/detect-supercritic.sh`, `tests/supercritic/run-tests.sh`
+- Reference (read-only, as the style baseline): `scripts/bump-version.sh`, `scripts/lint-shell.sh`, `scripts/sync-to-codex-plugin.sh`, and the existing test runner `tests/antigravity/run-tests.sh`
 - Verify/modify: `.gitignore`
 
-- [ ] **Step 1: Audit the three scripts against house style**
+- [ ] **Step 1: Establish the house-style baseline from existing scripts**
 
-Run: `scripts/lint-shell.sh --all`
-Expected: baseline result recorded. Then read each header and compare to the engine's conventions (shebang, `set -euo pipefail`, header usage block, `--flags`, `dirname "$0"` self-location).
+Read the headers/structure of the existing scripts as the reference standard:
+```bash
+for f in scripts/bump-version.sh scripts/lint-shell.sh scripts/sync-to-codex-plugin.sh tests/antigravity/run-tests.sh; do echo "=== $f ==="; head -15 "$f"; done
+```
+Note the shared conventions: shebang, `set -euo pipefail` placement, the header usage-block comment format, flag style, and (for the runner) the antigravity runner's loop body shape and its one-line header comment.
 
-- [ ] **Step 2: Apply only the necessary alignments**
+- [ ] **Step 2: Bring our scripts into line (conformance only, no behavior change)**
 
-For `scripts/sync-to-codex-plugin.sh`, add `set -euo pipefail` immediately after the header comment (verify the script still runs its existing test). Bring any divergent header/usage-block formatting in the three scripts into line with the engine. Make no behavior changes.
+Compare our three added files against that baseline and fix only divergences in OURS:
+- `tests/supercritic/run-tests.sh`: add the one-line header comment the antigravity mirror has (e.g. `# Run all Supercritic tests.`) between shebang and `set`; match the mirror's loop-body shape (the Task 4 review flagged the compact-semicolon form vs the mirror's multiline `echo` / `echo ">>> $t"` / `bash "$t"`).
+- `scripts/supercritic.sh`, `scripts/detect-supercritic.sh`: confirm their header usage-block format, flag conventions, and self-location idiom match the existing scripts; fix any divergence. Do not change behavior or the safety invariant.
 
-- [ ] **Step 3: Verify nothing broke**
+- [ ] **Step 3: Verify ours still pass**
 
-Run: `bash tests/codex-plugin-sync/test-sync-to-codex-plugin.sh` and `scripts/lint-shell.sh --all`
-Expected: existing sync test still passes; lint clean across all scripts.
+Run: `bash tests/supercritic/run-tests.sh` and `scripts/lint-shell.sh scripts/supercritic.sh scripts/detect-supercritic.sh tests/supercritic/run-tests.sh tests/supercritic/test-supercritic.sh tests/supercritic/test-detect-supercritic.sh`
+Expected: 28 tests pass; lint clean. The pre-existing scripts are untouched (confirm `git status` shows no changes to bump-version/lint-shell/sync-to-codex).
 
 - [ ] **Step 4: Ensure `.superpowers/` is gitignored**
 
-Run: `grep -q '^\.superpowers/' .gitignore || echo '.superpowers/' >> .gitignore`
+Run: `grep -q '^\.superpowers/' .gitignore 2>/dev/null || echo '.superpowers/' >> .gitignore`
 Expected: `.superpowers/` present in `.gitignore`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add scripts/bump-version.sh scripts/lint-shell.sh scripts/sync-to-codex-plugin.sh .gitignore
-git commit -m "chore(scripts): align template scripts to house style; gitignore .superpowers/"
+git add scripts/supercritic.sh scripts/detect-supercritic.sh tests/supercritic/run-tests.sh .gitignore
+git commit -m "chore(supercritic): conform new scripts to repo house style; gitignore .superpowers/"
 ```
+
+---
+
+### Task 8: Relocate scripts to `skills/brainstorming/scripts/` (user-directed)
+
+**Why:** the engine/detector/clis-doc are skill-invoked runtime assets, so they belong with the
+owning skill's assets (next to the visual-companion `start-server.sh` etc.), NOT in the plugin-root
+`scripts/` dev-tooling dir. Co-locating with brainstorming (the supercritic owner) also lets each
+consumer resolve siblings cleanly and removes the fallback off-by-one the final review found.
+
+**Moves (via `git mv`, preserving history):**
+- `scripts/supercritic.sh` → `skills/brainstorming/scripts/supercritic.sh`
+- `scripts/detect-supercritic.sh` → `skills/brainstorming/scripts/detect-supercritic.sh`
+- `scripts/supercritic-clis.md` → `skills/brainstorming/scripts/supercritic-clis.md`
+
+**Path updates:**
+- Tests: `tests/supercritic/test-supercritic.sh:6` and `test-detect-supercritic.sh:6` change
+  `$REPO_ROOT/scripts/...` → `$REPO_ROOT/skills/brainstorming/scripts/...`.
+- Skill prose (3 files) per the revised **Global Constraints → Script-path resolution**: brainstorming
+  uses `$SKILL_BASE/scripts/...`; writing-plans + requesting-code-review use
+  `$SKILL_BASE/../brainstorming/scripts/...`; fallback `find` pattern → `'*brainstorming/scripts/supercritic.sh'`
+  with siblings from `dirname "$ENGINE"`. Also fold in the final review's Minor: tab-anchor the
+  `agy` needle in the detector test (`$'agy\t'`).
+
+**Gate:** re-run the FULL suite from the new locations (`bash tests/supercritic/run-tests.sh` → 28
+pass) + shellcheck the moved scripts; confirm nothing remains at `scripts/supercritic*`.
 
 ---
 
@@ -666,7 +704,7 @@ git commit -m "chore(scripts): align template scripts to house style; gitignore 
 - Brainstorming offer + setup + smoke test → Task 5. ✓
 - Whole-flow consume hooks + mid-flow offer fallback → Task 6. ✓
 - Path-resolution spike (first) → Task 1. ✓
-- Other-scripts alignment (twice-asked) + `.gitignore` → Task 7. ✓
+- Conform OUR scripts to repo house style (NOT modify existing scripts) + `.gitignore` → Task 7. ✓
 
 **Placeholder scan:** `<ENGINE>`/`<DETECT>` in Tasks 5–6 are intentional substitution points resolved by Task 1 (the runtime path mechanism is genuinely unknown until probed); every code step ships complete code. No TODO/TBD/"add error handling" left.
 
@@ -676,7 +714,7 @@ git commit -m "chore(scripts): align template scripts to house style; gitignore 
 
 1. `bash tests/supercritic/run-tests.sh` → all engine + detector tests pass.
 2. `scripts/lint-shell.sh --all` → clean across all scripts.
-3. `bash tests/codex-plugin-sync/test-sync-to-codex-plugin.sh` → still passes after Task 7.
+3. Task 7 conformance: `git status` confirms the pre-existing scripts (bump-version/lint-shell/sync-to-codex) are UNTOUCHED; only our supercritic scripts + `.gitignore` changed.
 4. Path resolution: invoke `<ENGINE>` via a skill from a project that is NOT the superpowers repo; confirm it resolves and runs (Task 1 / Task 5 manual).
 5. Offer behavior + whole-flow + mid-flow entry: the manual walkthroughs in Tasks 5–6.
 6. Timeout/fail-loud: covered by the engine tests (sleep-cli and fail-cli stubs).
