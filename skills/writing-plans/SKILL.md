@@ -166,7 +166,6 @@ Fallback if the announcement is not in context:
 
 ```bash
 ENGINE=$(find ~/.claude/plugins -path '*superpowers*/scripts/supercritic.sh' 2>/dev/null | head -1)
-SKILL_BASE="$(dirname "$ENGINE")/../.."
 ```
 
 Your working directory stays at the user's project root — this ensures `.superpowers/supercritic.conf` and the plan path resolve correctly.
@@ -183,7 +182,7 @@ Fold its findings into the plan before proceeding.
 
 **Disabled** (`SUPERCRITIC_ENABLED=0`): Skip silently. Continue to Execution Handoff.
 
-**No conf** (arrived here without going through brainstorming): Make the one-time offer and run setup as described in the **brainstorming skill's "Supercritic" section**. Once verified, consume as in the first branch above.
+**No conf, or conf present but `SUPERCRITIC_VERIFIED` is not `1`** (arrived here without going through brainstorming, or setup was interrupted before the smoke test): Make the one-time offer and run setup as described in the **brainstorming skill's "Supercritic" section**. Once verified, consume as in the first branch above.
 
 ## Execution Handoff
 
