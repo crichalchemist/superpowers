@@ -51,13 +51,13 @@ Dispatch a `general-purpose` subagent, filling the template at [code-reviewer.md
 
 ```bash
 SKILL_BASE="<the path the harness announced for this skill>"
-ENGINE="$SKILL_BASE/../../scripts/supercritic.sh"
+ENGINE="$SKILL_BASE/../brainstorming/scripts/supercritic.sh"
 ```
 
 Fallback if the announcement is not in context:
 
 ```bash
-ENGINE=$(find ~/.claude/plugins -path '*superpowers*/scripts/supercritic.sh' 2>/dev/null | head -1)
+ENGINE=$(find ~/.claude/plugins -path '*brainstorming/scripts/supercritic.sh' 2>/dev/null | head -1)
 ```
 
 Your working directory stays at the user's project root — this ensures `.superpowers/supercritic.conf` resolves correctly.

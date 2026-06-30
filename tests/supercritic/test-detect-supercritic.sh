@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-DETECT="$REPO_ROOT/scripts/detect-supercritic.sh"
+DETECT="$REPO_ROOT/skills/brainstorming/scripts/detect-supercritic.sh"
 
 FAILURES=0
 TEST_ROOT="$(mktemp -d)"
@@ -34,7 +34,7 @@ echo "detect-supercritic tests"
 # $BASH is the running interpreter's absolute path — avoids PATH lookup for bash itself.
 out=$(PATH="$TEST_ROOT/bin" CLAUDE_PLUGIN_ROOT=/x CURSOR_PLUGIN_ROOT='' COPILOT_CLI='' \
   "$BASH" "$DETECT" 2>&1)
-assert_contains "$out" "agy" "lists installed agy"
+assert_contains "$out" $'agy\t' "lists installed agy"
 assert_contains "$out" "codex" "lists installed codex"
 assert_not_contains "$out" "cursor-agent" "omits not-installed cursor-agent"
 assert_contains "$out" $'harness\tclaude-code' "detects claude-code harness"

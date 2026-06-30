@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-ENGINE="$REPO_ROOT/scripts/supercritic.sh"
+ENGINE="$REPO_ROOT/skills/brainstorming/scripts/supercritic.sh"
 
 FAILURES=0
 TEST_ROOT="$(mktemp -d)"

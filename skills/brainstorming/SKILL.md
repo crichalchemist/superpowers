@@ -188,20 +188,19 @@ path as `SKILL_BASE` and resolve the three script paths before proceeding:
 
 ```bash
 SKILL_BASE="<the path the harness announced for this skill>"
-ENGINE="$SKILL_BASE/../../scripts/supercritic.sh"
-DETECT="$SKILL_BASE/../../scripts/detect-supercritic.sh"
-CLIS_DOC="$SKILL_BASE/../../scripts/supercritic-clis.md"
+ENGINE="$SKILL_BASE/scripts/supercritic.sh"
+DETECT="$SKILL_BASE/scripts/detect-supercritic.sh"
+CLIS_DOC="$SKILL_BASE/scripts/supercritic-clis.md"
 ```
 
 If the announcement is not visible in context, locate the engine via the
 plugins directory as a fallback:
 
 ```bash
-ENGINE=$(find ~/.claude/plugins -path '*superpowers*/scripts/supercritic.sh' 2>/dev/null | head -1)
+ENGINE=$(find ~/.claude/plugins -path '*brainstorming/scripts/supercritic.sh' 2>/dev/null | head -1)
 # Other harnesses may use a different plugins root; adjust accordingly.
-SKILL_BASE="$(dirname "$ENGINE")/../.."
-DETECT="$SKILL_BASE/scripts/detect-supercritic.sh"
-CLIS_DOC="$SKILL_BASE/scripts/supercritic-clis.md"
+DETECT="$(dirname "$ENGINE")/detect-supercritic.sh"
+CLIS_DOC="$(dirname "$ENGINE")/supercritic-clis.md"
 ```
 
 Your working directory stays at the user's project root throughout — this
