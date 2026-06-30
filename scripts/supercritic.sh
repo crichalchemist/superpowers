@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+#
 # supercritic.sh — opt-in, independent, read-only "supercritic" review via a
 # user-chosen CLI. Generalizes the original agy-review.sh: models are partial to
 # their own work, so a DIFFERENT model catches what the authoring model waves

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+#
 # detect-supercritic.sh — report independent-review-capable AI CLIs
 # installed, harness running. Reports only; never decides, never
 # executes candidate CLI, never installs anything.
