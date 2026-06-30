@@ -45,6 +45,38 @@ Dispatch a `general-purpose` subagent, filling the template at [code-reviewer.md
 - Note Minor issues for later
 - Push back if reviewer is wrong (with reasoning)
 
+## Supercritic (if configured)
+
+**Path resolution:**
+
+```bash
+SKILL_BASE="<the path the harness announced for this skill>"
+ENGINE="$SKILL_BASE/../../scripts/supercritic.sh"
+```
+
+Fallback if the announcement is not in context:
+
+```bash
+ENGINE=$(find ~/.claude/plugins -path '*superpowers*/scripts/supercritic.sh' 2>/dev/null | head -1)
+SKILL_BASE="$(dirname "$ENGINE")/../.."
+```
+
+Your working directory stays at the user's project root — this ensures `.superpowers/supercritic.conf` resolves correctly.
+
+After assembling the git SHAs (step 1), check `.superpowers/supercritic.conf` and take one of three branches:
+
+**Enabled and verified** (`SUPERCRITIC_ENABLED=1` and `SUPERCRITIC_VERIFIED=1`): Get an independent different-model pass on the diff before dispatching the reviewer subagent:
+
+```bash
+git diff "$BASE_SHA..$HEAD_SHA" | "$ENGINE" "Code review this diff" -
+```
+
+Incorporate its findings alongside the subagent reviewer's report.
+
+**Disabled** (`SUPERCRITIC_ENABLED=0`): Skip silently. Proceed to step 2.
+
+**No conf** (arrived here without going through brainstorming): Make the one-time offer and run setup as described in the **brainstorming skill's "Supercritic" section**. Once verified, consume as in the first branch above.
+
 ## Example
 
 ```

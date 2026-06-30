@@ -153,6 +153,38 @@ After writing the complete plan, look at the spec with fresh eyes and check the 
 
 If you find issues, fix them inline. No need to re-review — just fix and move on. If you find a spec requirement with no task, add the task.
 
+## Supercritic (if configured)
+
+**Path resolution:**
+
+```bash
+SKILL_BASE="<the path the harness announced for this skill>"
+ENGINE="$SKILL_BASE/../../scripts/supercritic.sh"
+```
+
+Fallback if the announcement is not in context:
+
+```bash
+ENGINE=$(find ~/.claude/plugins -path '*superpowers*/scripts/supercritic.sh' 2>/dev/null | head -1)
+SKILL_BASE="$(dirname "$ENGINE")/../.."
+```
+
+Your working directory stays at the user's project root — this ensures `.superpowers/supercritic.conf` and the plan path resolve correctly.
+
+Check `.superpowers/supercritic.conf` and take one of three branches:
+
+**Enabled and verified** (`SUPERCRITIC_ENABLED=1` and `SUPERCRITIC_VERIFIED=1`): Run the engine on the saved plan file before the execution handoff:
+
+```bash
+"$ENGINE" "Plan review: task decomposition, gaps, testability" docs/superpowers/plans/<file>.md
+```
+
+Fold its findings into the plan before proceeding.
+
+**Disabled** (`SUPERCRITIC_ENABLED=0`): Skip silently. Continue to Execution Handoff.
+
+**No conf** (arrived here without going through brainstorming): Make the one-time offer and run setup as described in the **brainstorming skill's "Supercritic" section**. Once verified, consume as in the first branch above.
+
 ## Execution Handoff
 
 After saving the plan, offer execution choice:
