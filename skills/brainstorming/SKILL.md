@@ -180,23 +180,47 @@ If they decline: write `SUPERCRITIC_ENABLED=0` to `.superpowers/supercritic.conf
 and proceed; do not re-offer.
 
 If they accept, run **setup**:
-1. Resolve the detector path from the base directory the harness announced for
-   this skill: `DETECT="<skill-base-dir>/../../scripts/detect-supercritic.sh"`.
-   Run `"$DETECT"` and present the installed CLIs. Establish each one's backing
+
+**Path resolution (do this first, before any step below):** When this skill
+loads, the harness prints a line like `Base directory for this skill:
+/abs/path/.../superpowers/skills/brainstorming`. Take that announced absolute
+path as `SKILL_BASE` and resolve the three script paths before proceeding:
+
+```bash
+SKILL_BASE="<the path the harness announced for this skill>"
+ENGINE="$SKILL_BASE/../../scripts/supercritic.sh"
+DETECT="$SKILL_BASE/../../scripts/detect-supercritic.sh"
+CLIS_DOC="$SKILL_BASE/../../scripts/supercritic-clis.md"
+```
+
+If the announcement is not visible in context, locate the engine via the
+plugins directory as a fallback:
+
+```bash
+ENGINE=$(find ~/.claude/plugins -path '*superpowers*/scripts/supercritic.sh' 2>/dev/null | head -1)
+# Other harnesses may use a different plugins root; adjust accordingly.
+SKILL_BASE="$(dirname "$ENGINE")/../.."
+DETECT="$SKILL_BASE/scripts/detect-supercritic.sh"
+CLIS_DOC="$SKILL_BASE/scripts/supercritic-clis.md"
+```
+
+Your working directory stays at the user's project root throughout — this
+ensures `.superpowers/supercritic.conf` and the artifact path resolve
+correctly. Only the script paths above are absolute.
+
+1. Run `"$DETECT"` and present the installed CLIs. Establish each one's backing
    model by asking (the binary name does not reveal it). Recommend one from a
    **different model family than the running harness** — recommending a
    Claude-backed CLI while running in Claude Code defeats the purpose.
-2. On the user's choice, confirm its headless invocation against
-   `<skill-base-dir>/../../scripts/supercritic-clis.md` and the CLI's own `--help`.
+2. On the user's choice, confirm its headless invocation against `$CLIS_DOC`
+   and the CLI's own `--help`.
 3. Write `.superpowers/supercritic.conf` with `SUPERCRITIC_CMD=(chosen-cmd args...)`,
    `SUPERCRITIC_ENABLED=1`, `SUPERCRITIC_MODEL`, and `SUPERCRITIC_VERIFIED=0`.
-4. **Smoke-test:** resolve the engine: `ENGINE="<skill-base-dir>/../../scripts/supercritic.sh"`.
-   Run: `echo "smoke test: reply OK" | "$ENGINE" "smoke" -`. Confirm it
-   returns within the timeout (default 120 s) and does not hang. Only then set
-   `SUPERCRITIC_VERIFIED=1`.
+4. **Smoke-test:** run `echo "smoke test: reply OK" | "$ENGINE" "smoke" -`.
+   Confirm it returns within the timeout (default 120 s) and does not hang.
+   Only then set `SUPERCRITIC_VERIFIED=1`.
 5. Ensure `.superpowers/` is in the project's `.gitignore`.
 
-Once configured, after the spec self-review, resolve the engine path
-(`ENGINE="<skill-base-dir>/../../scripts/supercritic.sh"`) and run:
+Once configured, after the spec self-review, run:
 `"$ENGINE" "Design spec: architecture, risks, testability" docs/superpowers/specs/<file>.md`
 Address its findings before the user-review gate.
