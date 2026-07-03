@@ -226,7 +226,11 @@ conf=${SUPERCRITIC_CONF:-.superpowers/supercritic.conf}
 . "$conf"
 
 [ "${SUPERCRITIC_ENABLED:-0}" = "1" ] || die "supercritic disabled in $conf"
-[ "${SUPERCRITIC_VERIFIED:-0}" = "1" ] || die "supercritic not verified in $conf (smoke test never passed)"
+# SUPERCRITIC_SMOKE=1 (env) bypasses only this gate: setup's smoke test runs
+# through the engine BEFORE it can honestly set VERIFIED=1 (see Task 9).
+if [ "${SUPERCRITIC_SMOKE:-0}" != "1" ]; then
+  [ "${SUPERCRITIC_VERIFIED:-0}" = "1" ] || die "supercritic not verified in $conf (smoke test never passed)"
+fi
 if ! declare -p SUPERCRITIC_CMD >/dev/null 2>&1 || [ "${#SUPERCRITIC_CMD[@]}" -lt 1 ]; then
   die "SUPERCRITIC_CMD not set as a non-empty bash array in $conf"
 fi
@@ -543,8 +547,10 @@ If they accept, run **setup**:
    `scripts/supercritic-clis.md` and the CLI's own `--help`.
 3. Write `.superpowers/supercritic.conf` with `SUPERCRITIC_CMD`,
    `SUPERCRITIC_ENABLED=1`, `SUPERCRITIC_MODEL`, and `SUPERCRITIC_VERIFIED=0`.
-4. **Smoke-test:** `echo "smoke test: reply OK" | <ENGINE> "smoke" -`. Confirm it
-   returns within the timeout and does not hang. Only then set
+4. **Smoke-test:** `echo "smoke test: reply OK" | SUPERCRITIC_SMOKE=1 <ENGINE> "smoke" -`
+   (`SUPERCRITIC_SMOKE=1` bypasses only the engine's verified gate — the conf still
+   says `VERIFIED=0` here; without it the smoke test dies on its own gate, see Task 9).
+   Confirm it returns within the timeout and does not hang. Only then set
    `SUPERCRITIC_VERIFIED=1`.
 5. Ensure `.superpowers/` is in the project's `.gitignore`.
 
@@ -690,6 +696,52 @@ consumer resolve siblings cleanly and removes the fallback off-by-one the final 
 
 **Gate:** re-run the FULL suite from the new locations (`bash tests/supercritic/run-tests.sh` → 28
 pass) + shellcheck the moved scripts; confirm nothing remains at `scripts/supercritic*`.
+
+---
+
+### Task 9: Post-merge review fixes (review-directed)
+
+An independent post-merge code review (base `98b0800`, head `5a69999`) found one Critical
+and three Important defects. The Critical one originated in this plan and was faithfully
+implemented; the plan text above has been corrected in place. Deltas applied:
+
+**Critical — smoke-test chicken-and-egg.** Task 5 step 4 smoke-tested *through the engine*
+while the conf still said `SUPERCRITIC_VERIFIED=0`, but the engine (Task 2) hard-fails
+unverified confs — so first-time setup could never pass. Fix: `SUPERCRITIC_SMOKE=1` env var
+bypasses only the VERIFIED gate (never the ENABLED gate), preserving the "VERIFIED=1 means
+the smoke test actually passed" semantics. All 20 engine unit tests passed while the
+documented lifecycle was impossible: state-based tests can't catch ordering contradictions
+between states — a lifecycle test now covers it.
+
+**Important — dead harness detection.** The detector keyed on `CLAUDE_PLUGIN_ROOT`, which
+Task 1's own probe established is unset in skill bash context. It now also accepts
+`CLAUDECODE=1` (set in Claude Code bash sessions). Detector tests explicitly clear
+`CLAUDECODE` per invocation — the suite itself runs inside Claude Code, so the host value
+would otherwise leak in and flip the "unknown harness" case.
+
+**Important — tracked-conf ACE guard.** Sourcing `./.superpowers/supercritic.conf` executes
+it; a hostile clone could commit one and get arbitrary bash run by a consume hook. The
+engine now refuses to source a conf that `git ls-files --error-unmatch` reports as tracked —
+legit confs are always untracked by construction (setup step 5 gitignores `.superpowers/`).
+
+**Important — single-argv size cap.** The prompt travels as one exec argument; Linux caps a
+single argument at ~128 KiB (`MAX_ARG_STRLEN`). The engine now refuses content over 100 KB
+with a "narrow the diff" error; requesting-code-review documents the pathspec workaround.
+
+**Minors folded in:** `timeout -k 5` kill-after grace (rc 137 recognized); empty CLI output
+now fails loud instead of exiting 0 silently (output is captured, and the bash-fallback
+watcher's stdout is detached so an orphaned `sleep` can't stall the capture); prompt asks
+for quoted text instead of line numbers (content carries none); the harness-root caveat on
+the `find` fallback now appears in all three consuming skills.
+
+**Deviations confirmed as intentional (recorded, not changed):** the engine keeps conf/artifact
+paths CWD-relative with no `SCRIPT_DIR` (Task 7 house-style item deliberately skipped — the
+engine must resolve against the *user's project*, not the plugin dir); requesting-code-review
+runs supercritic *before* dispatching the reviewer subagent (plan said "after assembling the
+review") so both reports land together for the fix pass.
+
+**Gate:** full suite green from `bash tests/supercritic/run-tests.sh` (28 prior + 12 new
+assertions) + shellcheck clean on both scripts.
 
 ---
 
