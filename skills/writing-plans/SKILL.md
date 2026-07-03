@@ -166,6 +166,7 @@ Fallback if the announcement is not in context:
 
 ```bash
 ENGINE=$(find ~/.claude/plugins -path '*brainstorming/scripts/supercritic.sh' 2>/dev/null | head -1)
+# Other harnesses may use a different plugins root; adjust accordingly.
 ```
 
 Your working directory stays at the user's project root — this ensures `.superpowers/supercritic.conf` and the plan path resolve correctly.

@@ -215,9 +215,11 @@ correctly. Only the script paths above are absolute.
    and the CLI's own `--help`.
 3. Write `.superpowers/supercritic.conf` with `SUPERCRITIC_CMD=(chosen-cmd args...)`,
    `SUPERCRITIC_ENABLED=1`, `SUPERCRITIC_MODEL`, and `SUPERCRITIC_VERIFIED=0`.
-4. **Smoke-test:** run `echo "smoke test: reply OK" | "$ENGINE" "smoke" -`.
-   Confirm it returns within the timeout (default 120 s) and does not hang.
-   Only then set `SUPERCRITIC_VERIFIED=1`.
+4. **Smoke-test:** run `echo "smoke test: reply OK" | SUPERCRITIC_SMOKE=1 "$ENGINE" "smoke" -`.
+   (`SUPERCRITIC_SMOKE=1` bypasses the engine's verified gate — the conf still
+   says `SUPERCRITIC_VERIFIED=0` at this point, by design.) Confirm it returns
+   within the timeout (default 120 s) and does not hang. Only then set
+   `SUPERCRITIC_VERIFIED=1`.
 5. Ensure `.superpowers/` is in the project's `.gitignore`.
 
 Once configured, after the spec self-review, run:

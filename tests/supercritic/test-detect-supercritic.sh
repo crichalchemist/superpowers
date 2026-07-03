@@ -32,22 +32,27 @@ echo "detect-supercritic tests"
 
 # Note: needles with tabs use $'...\t...' so the literal tab survives copy-paste.
 # $BASH is the running interpreter's absolute path — avoids PATH lookup for bash itself.
-out=$(PATH="$TEST_ROOT/bin" CLAUDE_PLUGIN_ROOT=/x CURSOR_PLUGIN_ROOT='' COPILOT_CLI='' \
+out=$(PATH="$TEST_ROOT/bin" CLAUDE_PLUGIN_ROOT=/x CLAUDECODE='' CURSOR_PLUGIN_ROOT='' COPILOT_CLI='' \
   "$BASH" "$DETECT" 2>&1)
 assert_contains "$out" $'agy\t' "lists installed agy"
 assert_contains "$out" "codex" "lists installed codex"
 assert_not_contains "$out" "cursor-agent" "omits not-installed cursor-agent"
 assert_contains "$out" $'harness\tclaude-code' "detects claude-code harness"
 
-out=$(PATH="$TEST_ROOT/bin" CLAUDE_PLUGIN_ROOT='' CURSOR_PLUGIN_ROOT=/y COPILOT_CLI='' \
+# Skill/bash contexts have CLAUDECODE=1 but no CLAUDE_PLUGIN_ROOT.
+out=$(PATH="$TEST_ROOT/bin" CLAUDE_PLUGIN_ROOT='' CLAUDECODE=1 CURSOR_PLUGIN_ROOT='' COPILOT_CLI='' \
+  "$BASH" "$DETECT" 2>&1)
+assert_contains "$out" $'harness\tclaude-code' "CLAUDECODE=1 alone detects claude-code"
+
+out=$(PATH="$TEST_ROOT/bin" CLAUDE_PLUGIN_ROOT='' CLAUDECODE='' CURSOR_PLUGIN_ROOT=/y COPILOT_CLI='' \
   "$BASH" "$DETECT" 2>&1)
 assert_contains "$out" $'harness\tcursor' "cursor env wins"
 
-out=$(PATH="$TEST_ROOT/bin" CLAUDE_PLUGIN_ROOT='' CURSOR_PLUGIN_ROOT='' COPILOT_CLI=/x \
+out=$(PATH="$TEST_ROOT/bin" CLAUDE_PLUGIN_ROOT='' CLAUDECODE='' CURSOR_PLUGIN_ROOT='' COPILOT_CLI=/x \
   "$BASH" "$DETECT" 2>&1)
 assert_contains "$out" $'harness\tcopilot' "detects copilot harness"
 
-out=$(PATH="$TEST_ROOT/bin" CLAUDE_PLUGIN_ROOT='' CURSOR_PLUGIN_ROOT='' COPILOT_CLI='' \
+out=$(PATH="$TEST_ROOT/bin" CLAUDE_PLUGIN_ROOT='' CLAUDECODE='' CURSOR_PLUGIN_ROOT='' COPILOT_CLI='' \
   "$BASH" "$DETECT" 2>&1)
 assert_contains "$out" $'harness\tunknown' "detects unknown harness"
 assert_contains "$out" "EOLed-upstream(#1846)" "gemini note present"

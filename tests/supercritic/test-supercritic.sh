@@ -47,6 +47,13 @@ exit 3
 STUB
 chmod +x "$TEST_ROOT/fail-cli"
 
+# Stub CLI: exits 0 with no output (empty-review test).
+cat >"$TEST_ROOT/silent-cli" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+chmod +x "$TEST_ROOT/silent-cli"
+
 echo "supercritic engine tests"
 
 # --- happy path: prints the review, passes focus+content through ---
@@ -116,6 +123,17 @@ out=$(SUPERCRITIC_CONF="$TEST_ROOT/unverified.conf" "$ENGINE" "f" - <<<"x" 2>&1)
 assert_status "$rc" 1 "unverified conf exits 1"
 assert_contains "$out" "not verified" "unverified conf message"
 
+# --- setup lifecycle: SUPERCRITIC_SMOKE=1 bypasses ONLY the verified gate ---
+# (setup smoke-tests through the engine BEFORE it can honestly set VERIFIED=1)
+out=$(printf 'smoke' | SUPERCRITIC_CONF="$TEST_ROOT/unverified.conf" SUPERCRITIC_SMOKE=1 "$ENGINE" "smoke" - 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 0 "SUPERCRITIC_SMOKE=1 lets the smoke test run against an unverified conf"
+assert_contains "$out" "REVIEW_MARKER" "smoke run reaches the CLI"
+
+# --- SUPERCRITIC_SMOKE must not override the enabled gate ---
+out=$(SUPERCRITIC_CONF="$TEST_ROOT/dis.conf" SUPERCRITIC_SMOKE=1 "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 1 "SUPERCRITIC_SMOKE=1 still respects SUPERCRITIC_ENABLED=0"
+assert_contains "$out" "disabled" "smoke-on-disabled message"
+
 # --- empty SUPERCRITIC_CMD: fail loud, exit 1 ---
 cat >"$TEST_ROOT/emptycmd.conf" <<CONF
 SUPERCRITIC_CMD=()
@@ -136,6 +154,50 @@ CONF
 out=$(SUPERCRITIC_CONF="$TEST_ROOT/ok2.conf" "$ENGINE" "f" "$TEST_ROOT/does-not-exist.txt" 2>&1) && rc=0 || rc=$?
 assert_status "$rc" 2 "missing file exits 2"
 assert_contains "$out" "no such file" "missing file message"
+
+# --- git-tracked conf: refuse to source (hostile-clone ACE guard) ---
+# A conf committed to a repo would execute attacker bash on first consume-hook
+# run. Staging is enough for git ls-files to consider it tracked.
+mkdir -p "$TEST_ROOT/hostile-repo/.superpowers"
+git -C "$TEST_ROOT/hostile-repo" init -q
+cat >"$TEST_ROOT/hostile-repo/.superpowers/supercritic.conf" <<CONF
+SUPERCRITIC_CMD=("$TEST_ROOT/echo-cli")
+SUPERCRITIC_ENABLED=1
+SUPERCRITIC_VERIFIED=1
+CONF
+git -C "$TEST_ROOT/hostile-repo" add .superpowers/supercritic.conf
+out=$(cd "$TEST_ROOT/hostile-repo" && "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 1 "tracked conf exits 1"
+assert_contains "$out" "tracked by git" "tracked conf refusal message"
+
+# --- untracked conf inside a git repo: normal operation ---
+mkdir -p "$TEST_ROOT/clean-repo/.superpowers"
+git -C "$TEST_ROOT/clean-repo" init -q
+cat >"$TEST_ROOT/clean-repo/.superpowers/supercritic.conf" <<CONF
+SUPERCRITIC_CMD=("$TEST_ROOT/echo-cli")
+SUPERCRITIC_ENABLED=1
+SUPERCRITIC_VERIFIED=1
+SUPERCRITIC_TIMEOUT=10
+CONF
+out=$(cd "$TEST_ROOT/clean-repo" && printf 'x' | "$ENGINE" "f" - 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 0 "untracked conf in a git repo works"
+assert_contains "$out" "REVIEW_MARKER" "untracked-conf run prints CLI output"
+
+# --- oversize content: refuse before exec (single-argv ~128 KiB cap on Linux) ---
+out=$(head -c 120000 /dev/zero | tr '\0' 'a' | SUPERCRITIC_CONF="$TEST_ROOT/ok2.conf" "$ENGINE" "f" - 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 1 "oversize content exits 1"
+assert_contains "$out" "too large" "oversize content message"
+
+# --- CLI exits 0 with no output: fail loud, not silent success ---
+cat >"$TEST_ROOT/silent.conf" <<CONF
+SUPERCRITIC_CMD=("$TEST_ROOT/silent-cli")
+SUPERCRITIC_ENABLED=1
+SUPERCRITIC_VERIFIED=1
+SUPERCRITIC_TIMEOUT=10
+CONF
+out=$(SUPERCRITIC_CONF="$TEST_ROOT/silent.conf" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 1 "empty CLI output exits 1"
+assert_contains "$out" "no output" "empty CLI output message"
 
 if [ "$FAILURES" -gt 0 ]; then echo "$FAILURES supercritic engine test(s) failed"; exit 1; fi
 echo "All supercritic engine tests passed"

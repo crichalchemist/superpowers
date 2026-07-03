@@ -24,11 +24,13 @@ for cli in "${CANDIDATES[@]}"; do
 done
 
 # Harness detection mirrors hooks/session-start (env set by harness).
+# CLAUDE_PLUGIN_ROOT only exists in hook contexts; Claude Code bash/skill
+# contexts export CLAUDECODE=1 instead, so accept either.
 if [ -n "${CURSOR_PLUGIN_ROOT:-}" ]; then
   harness="cursor"
 elif [ -n "${COPILOT_CLI:-}" ]; then
   harness="copilot"
-elif [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
+elif [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] || [ "${CLAUDECODE:-}" = "1" ]; then
   harness="claude-code"
 else
   harness="unknown"

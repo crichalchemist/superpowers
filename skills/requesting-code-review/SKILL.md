@@ -58,6 +58,7 @@ Fallback if the announcement is not in context:
 
 ```bash
 ENGINE=$(find ~/.claude/plugins -path '*brainstorming/scripts/supercritic.sh' 2>/dev/null | head -1)
+# Other harnesses may use a different plugins root; adjust accordingly.
 ```
 
 Your working directory stays at the user's project root — this ensures `.superpowers/supercritic.conf` resolves correctly.
@@ -69,6 +70,9 @@ After assembling the git SHAs (step 1), check `.superpowers/supercritic.conf` an
 ```bash
 git diff "$BASE_SHA..$HEAD_SHA" | "$ENGINE" "Code review this diff" -
 ```
+
+If the engine refuses the diff as too large (>100 KB), narrow it with pathspecs
+(e.g., `git diff "$BASE_SHA..$HEAD_SHA" -- src/`) and run one pass per area.
 
 Incorporate its findings alongside the subagent reviewer's report.
 
