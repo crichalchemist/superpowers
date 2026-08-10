@@ -114,7 +114,7 @@ Two edits to `skills/subagent-driven-development/SKILL.md`:
 
 Neither edit touches a Red Flags table, rationalization list, or "human partner" phrasing.
 
-**Open decision, deferred to plan time:** whether this stays fork-local or targets `upstream/dev`. A skill-file change upstream requires eval evidence per the contributor guidelines, which materially changes the work.
+**Decided: fork-local.** This does not target `upstream/dev`. Upstream holds skill-file changes to an eval-evidence bar, and this work is not scoped to produce that evidence. The two SKILL.md edits are therefore fork divergence, and future merges from `upstream/dev` will need to preserve them — the same way the fork's Supercritic node survived the dev merge by occupying a distinct region of `brainstorming/SKILL.md`. Keep both edits narrow and positioned away from upstream's active edit regions.
 
 ## Test plan
 
