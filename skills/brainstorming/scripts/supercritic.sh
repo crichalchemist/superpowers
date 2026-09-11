@@ -124,6 +124,13 @@ case "${SUPERCRITIC_CMD[0]}" in
 esac
 
 timeout_secs=${SUPERCRITIC_TIMEOUT:-120}
+# Validate before use: GNU timeout reads 0 as "no limit", so an unvalidated 0
+# switches the SAFETY INVARIANT's timeout guard off entirely and the CLI runs
+# unbounded. A non-numeric value produced a different exit code depending on
+# which timeout binary the host had. Both are config errors — say so, exit 3.
+case "$timeout_secs" in
+  '' | *[!0-9]* | 0) die "SUPERCRITIC_TIMEOUT must be a positive integer of seconds (got '$timeout_secs')" 3 ;;
+esac
 
 # The prompt travels as ONE exec argument; Linux caps a single argument at
 # ~128 KiB (MAX_ARG_STRLEN). Bound well below the cap and fail loud — and check

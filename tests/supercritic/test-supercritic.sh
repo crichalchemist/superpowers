@@ -356,5 +356,31 @@ assert_status "$rc" 3 "unrecognised git result exits 3"
 assert_contains "$out" "git tracked-conf check failed (exit 125)" "unrecognised git result message"
 assert_not_contains "$out" "REVIEW_MARKER" "unrecognised git result never sources the conf"
 
+# --- SUPERCRITIC_TIMEOUT must be a positive integer ---
+# 0 is the dangerous one: GNU timeout reads it as "no limit", so the CLI runs
+# unbounded and the SAFETY INVARIANT's "always timeout-guarded" stops being
+# true — a disabled guard, not a guard that happened not to fire. A non-numeric
+# value produced a different exit code on each host's timeout binary.
+cat >"$TEST_ROOT/zerotimeout.conf" <<CONF
+SUPERCRITIC_CMD=("$TEST_ROOT/echo-cli")
+SUPERCRITIC_ENABLED=1
+SUPERCRITIC_VERIFIED=1
+SUPERCRITIC_TIMEOUT=0
+CONF
+out=$(SUPERCRITIC_CONF="$TEST_ROOT/zerotimeout.conf" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 3 "SUPERCRITIC_TIMEOUT=0 exits 3"
+assert_contains "$out" "positive integer" "zero timeout message"
+assert_not_contains "$out" "REVIEW_MARKER" "zero timeout never runs the CLI unguarded"
+
+cat >"$TEST_ROOT/badtimeout.conf" <<CONF
+SUPERCRITIC_CMD=("$TEST_ROOT/echo-cli")
+SUPERCRITIC_ENABLED=1
+SUPERCRITIC_VERIFIED=1
+SUPERCRITIC_TIMEOUT=abc
+CONF
+out=$(SUPERCRITIC_CONF="$TEST_ROOT/badtimeout.conf" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 3 "non-numeric SUPERCRITIC_TIMEOUT exits 3"
+assert_contains "$out" "positive integer" "non-numeric timeout message"
+
 if [ "$FAILURES" -gt 0 ]; then echo "$FAILURES supercritic engine test(s) failed"; exit 1; fi
 echo "All supercritic engine tests passed"
