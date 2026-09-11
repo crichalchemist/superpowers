@@ -290,5 +290,36 @@ else fail "fork stub recorded its grandchild pid"; fi
 if [ -n "$gc_pid" ] && ! kill -0 "$gc_pid" 2>/dev/null; then pass "fallback kills the forked grandchild too"
 else fail "fallback kills the forked grandchild too"; kill -KILL "$gc_pid" 2>/dev/null || true; fi
 
+# --- oversize FILE is refused without being read ---
+# A 200 MB sparse file: stat-cheap to size, expensive to read. The old code ran
+# cat into a variable first, which also meant a file of NUL bytes came back
+# empty and slipped past the guard entirely.
+dd if=/dev/zero of="$TEST_ROOT/huge.bin" bs=1 count=0 seek=209715200 2>/dev/null
+start=$(date +%s)
+out=$(SUPERCRITIC_CONF="$TEST_ROOT/ok2.conf" "$ENGINE" "f" "$TEST_ROOT/huge.bin" 2>&1) && rc=0 || rc=$?
+elapsed=$(( $(date +%s) - start ))
+assert_status "$rc" 6 "oversize file exits 6"
+assert_contains "$out" "too large" "oversize file message"
+if [ "$elapsed" -le 5 ]; then pass "oversize file refused without reading it"; else fail "oversize file was read (${elapsed}s)"; fi
+
+# --- oversize STDIN is refused without draining the producer ---
+# `yes` never ends: if the engine reads to EOF this never returns.
+start=$(date +%s)
+out=$(yes AAAAAAAA | SUPERCRITIC_CONF="$TEST_ROOT/ok2.conf" "$ENGINE" "f" - 2>&1) && rc=0 || rc=$?
+elapsed=$(( $(date +%s) - start ))
+assert_status "$rc" 6 "oversize stdin exits 6"
+assert_contains "$out" "too large" "oversize stdin message"
+if [ "$elapsed" -le 5 ]; then pass "oversize stdin refused without draining the producer"; else fail "oversize stdin drained (${elapsed}s)"; fi
+
+# --- a stream whose byte MAX+1 is a newline is refused, not silently truncated ---
+# This is the trap the guard byte exists for. Command substitution strips
+# trailing newlines, so a bare `head -c MAX+1` followed by a byte count sees
+# exactly MAX bytes here, accepts the stream, drops everything after the
+# newline, and reviews a truncated document with exit 0.
+out=$( { head -c 100000 /dev/zero | tr '\0' 'a'; printf '\nTAIL_AFTER_THE_BOUNDARY\n'; } \
+  | SUPERCRITIC_CONF="$TEST_ROOT/ok2.conf" "$ENGINE" "f" - 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 6 "newline at the cap boundary exits 6"
+assert_not_contains "$out" "REVIEW_MARKER" "boundary stream is refused, never reviewed truncated"
+
 if [ "$FAILURES" -gt 0 ]; then echo "$FAILURES supercritic engine test(s) failed"; exit 1; fi
 echo "All supercritic engine tests passed"

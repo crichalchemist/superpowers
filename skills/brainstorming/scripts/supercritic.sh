@@ -73,18 +73,29 @@ esac
 
 timeout_secs=${SUPERCRITIC_TIMEOUT:-120}
 
+# The prompt travels as ONE exec argument; Linux caps a single argument at
+# ~128 KiB (MAX_ARG_STRLEN). Bound well below the cap and fail loud — and check
+# the size BEFORE buffering, so an oversize source is refused, never read whole.
+MAX_BYTES=100000
 if [ "$src" = "-" ]; then
-  content=$(cat)
+  # Read at most MAX_BYTES+1 so an oversize stream is refused without being
+  # drained. The trailing X survives command substitution's newline stripping,
+  # so the count below is the true count of what was read — without it, a
+  # stream whose byte MAX_BYTES+1 is a newline would be silently truncated to
+  # MAX_BYTES and reviewed as if it were the whole document.
+  content=$(head -c "$(( MAX_BYTES + 1 ))"; printf 'X')
+  content=${content%X}
+  content_bytes=$(( $(printf '%s' "$content" | wc -c) ))
+  if [ "$content_bytes" -gt "$MAX_BYTES" ]; then
+    die "content too large (more than ${MAX_BYTES} bytes) — narrow the diff or split the review" 6
+  fi
 else
   [ -f "$src" ] || { echo "supercritic: no such file: $src" >&2; exit 2; }
+  src_bytes=$(( $(wc -c < "$src") ))
+  if [ "$src_bytes" -gt "$MAX_BYTES" ]; then
+    die "content too large (${src_bytes} bytes > ${MAX_BYTES}) — narrow the diff or split the review" 6
+  fi
   content=$(cat "$src")
-fi
-
-# The prompt travels as ONE exec argument; Linux caps a single argument at
-# ~128 KiB (MAX_ARG_STRLEN). Bound well below the cap and fail loud.
-content_bytes=$(( $(printf '%s' "$content" | wc -c) ))
-if [ "$content_bytes" -gt 100000 ]; then
-  die "content too large (${content_bytes} bytes > 100000) — narrow the diff or split the review" 6
 fi
 
 prompt=$(cat <<EOF
