@@ -258,6 +258,35 @@ out=$(PATH="$BARE_BIN" SUPERCRITIC_CONF="$TEST_ROOT/unresolvable.conf" \
 assert_status "$rc" 3 "unresolvable SUPERCRITIC_CMD exits 3"
 assert_contains "$out" "not found on PATH" "unresolvable cmd message"
 
+# --- a name that resolves to something that is not an executable file ---
+# `command -v echo` returns "echo", not a path: the array expansion would run
+# the shell builtin, which echoes the prompt straight back and reads to the
+# caller as a completed review. A function name behaves the same way. Both must
+# refuse rather than produce a fake review.
+cat >"$TEST_ROOT/builtin.conf" <<CONF
+SUPERCRITIC_CMD=(echo)
+SUPERCRITIC_ENABLED=1
+SUPERCRITIC_VERIFIED=1
+SUPERCRITIC_TIMEOUT=10
+CONF
+out=$(PATH="$BARE_BIN" SUPERCRITIC_CONF="$TEST_ROOT/builtin.conf" \
+  "$BASH" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 3 "builtin SUPERCRITIC_CMD exits 3"
+assert_contains "$out" "executable file" "builtin cmd message"
+assert_not_contains "$out" "READ-ONLY review" "builtin never echoes the prompt back as a review"
+
+cat >"$TEST_ROOT/function.conf" <<CONF
+myreviewer() { echo fake; }
+SUPERCRITIC_CMD=(myreviewer)
+SUPERCRITIC_ENABLED=1
+SUPERCRITIC_VERIFIED=1
+SUPERCRITIC_TIMEOUT=10
+CONF
+out=$(PATH="$BARE_BIN" SUPERCRITIC_CONF="$TEST_ROOT/function.conf" \
+  "$BASH" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 3 "function SUPERCRITIC_CMD exits 3"
+assert_contains "$out" "executable file" "function cmd message"
+
 # --- an absolute SUPERCRITIC_CMD[0] is already pinned: no resolution line ---
 out=$(printf 'x' | SUPERCRITIC_CONF="$conf" "$ENGINE" "f" - 2>&1) && rc=0 || rc=$?
 assert_status "$rc" 0 "absolute SUPERCRITIC_CMD still works"

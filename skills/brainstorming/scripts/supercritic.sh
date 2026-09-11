@@ -126,10 +126,13 @@ case "${SUPERCRITIC_CMD[0]}" in
   *)
     resolved=$(command -v -- "${SUPERCRITIC_CMD[0]}") \
       || die "SUPERCRITIC_CMD[0] '${SUPERCRITIC_CMD[0]}' not found on PATH (put the absolute path detect-supercritic.sh reported into $conf)" 3
-    case "$resolved" in
-      */*) ;;
-      *) die "SUPERCRITIC_CMD[0] '${SUPERCRITIC_CMD[0]}' resolves to a shell builtin, not a binary (put the absolute path detect-supercritic.sh reported into $conf)" 3 ;;
-    esac
+    # `command -v` answers about shell words, not only binaries: for a builtin
+    # or a function it prints the bare name, and for an alias it prints the
+    # whole `alias x='…'` definition, which contains a slash and would sail past
+    # a "does it look like a path" test. Only an executable file is a CLI we can
+    # hand a prompt to — anything else would run the shell's own `echo` and
+    # return the prompt as though it were a review.
+    [ -x "$resolved" ] || die "SUPERCRITIC_CMD[0] '${SUPERCRITIC_CMD[0]}' does not resolve to an executable file (put the absolute path detect-supercritic.sh reported into $conf)" 3
     echo "supercritic: resolved ${SUPERCRITIC_CMD[0]} -> $resolved" >&2
     SUPERCRITIC_CMD[0]=$resolved
     ;;
