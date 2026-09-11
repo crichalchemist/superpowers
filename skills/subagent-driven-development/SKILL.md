@@ -146,7 +146,7 @@ a ledger file, not only in todos.
   ledger at the old flat path `.superpowers/sdd/progress.md` — is another
   plan's progress: leave it in place and start your own, fresh.
 - Reconcile the plan's checkboxes from the ledger before dispatching: run this
-  skill's `scripts/sdd-checkoff PLAN_FILE`. On a fresh plan it exits 0 and does
+  skill's `scripts/plan-checkoff PLAN_FILE`. On a fresh plan it exits 0 and does
   nothing; after an aborted run it checks off the tasks the ledger recorded, so
   the tracked plan file stops lying about what is done.
 - Create the ledger with its identity as the first line:
@@ -483,7 +483,7 @@ took on your human partner's behalf reach them — they read it and rework
 whatever you got wrong. A ruling that dies with the workspace was a decision
 made in secret.
 
-Before deleting the workspace, run `scripts/sdd-checkoff PLAN_FILE` one last
+Before deleting the workspace, run `scripts/plan-checkoff PLAN_FILE` one last
 time — deletion destroys the ledger, so this is the last moment the plan's
 checkboxes can be reconciled from it. Inspect the resulting `git diff` of the
 plan before committing: the script cannot detect a plan whose quoted

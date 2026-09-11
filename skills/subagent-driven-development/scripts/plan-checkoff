@@ -7,19 +7,19 @@
 # happened. Run at SDD setup (heals an aborted prior run) and immediately
 # before workspace deletion (captures the happy path).
 #
-# Usage: sdd-checkoff PLAN_FILE
-#        sdd-checkoff --print-range PLAN_FILE TASK_NUMBER   # debug/parity
+# Usage: plan-checkoff PLAN_FILE
+#        plan-checkoff --print-range PLAN_FILE TASK_NUMBER   # debug/parity
 #
 # Fence handling is byte-identical to task-brief's toggle. That model does not
 # understand ~~~, indented, or >=4-backtick nested fences; see the spec's
 # "Fence model — stated limits". Parity with task-brief is the standard.
 set -euo pipefail
 
-die() { echo "sdd-checkoff: $*" >&2; exit 3; }
+die() { echo "plan-checkoff: $*" >&2; exit 3; }
 
 # --print-range prints one task's range, for parity testing against task-brief.
 if [ "${1:-}" = "--print-range" ]; then
-  [ $# -eq 3 ] || { echo "usage: sdd-checkoff --print-range PLAN_FILE TASK_NUMBER" >&2; exit 2; }
+  [ $# -eq 3 ] || { echo "usage: plan-checkoff --print-range PLAN_FILE TASK_NUMBER" >&2; exit 2; }
   [ -f "$2" ] || { echo "no such plan file: $2" >&2; exit 2; }
   awk -v n="$3" '
     /^```/ { infence = !infence }
@@ -31,7 +31,7 @@ if [ "${1:-}" = "--print-range" ]; then
   exit 0
 fi
 
-[ $# -eq 1 ] || { echo "usage: sdd-checkoff PLAN_FILE" >&2; exit 2; }
+[ $# -eq 1 ] || { echo "usage: plan-checkoff PLAN_FILE" >&2; exit 2; }
 plan=$1
 [ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
 
@@ -39,7 +39,7 @@ dir=$("$(cd "$(dirname "$0")" && pwd)/sdd-workspace" "$plan")
 ledger="$dir/progress.md"
 
 if [ ! -f "$ledger" ]; then
-  echo "sdd-checkoff: no ledger at $ledger — nothing to reconcile" >&2
+  echo "plan-checkoff: no ledger at $ledger — nothing to reconcile" >&2
   exit 0
 fi
 
@@ -81,11 +81,11 @@ for n in "${want[@]}"; do
 done
 [ -z "$missing" ] || die "ledger names task(s)$missing with no matching heading in $plan — refusing (plan edited after the run?)"
 
-tmp=$(mktemp "$(dirname "$plan")/.sdd-checkoff.XXXXXX")
+tmp=$(mktemp "$(dirname "$plan")/.plan-checkoff.XXXXXX")
 cp -p "$plan" "$tmp"
 # Beside the plan, not in shared temp: the leak test scans this directory, and a
 # bare mktemp in /var/folders made that test flaky under concurrent temp churn.
-countfile=$(mktemp "$(dirname "$plan")/.sdd-checkoff-count.XXXXXX")
+countfile=$(mktemp "$(dirname "$plan")/.plan-checkoff-count.XXXXXX")
 trap 'rm -f "$tmp" "$countfile"' EXIT
 
 # Single pass: transformed plan to $tmp, tally to $countfile. Counting inside

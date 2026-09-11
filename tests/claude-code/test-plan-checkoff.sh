@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Tests for sdd-checkoff: ledger -> plan checkbox reconciliation.
+# Tests for plan-checkoff: ledger -> plan checkbox reconciliation.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")/../../skills/subagent-driven-development/scripts" && pwd)"
-CHECKOFF="$SCRIPT_DIR/sdd-checkoff"
+CHECKOFF="$SCRIPT_DIR/plan-checkoff"
 TASK_BRIEF="$SCRIPT_DIR/task-brief"
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
@@ -11,7 +11,7 @@ failures=0
 pass() { echo "  [PASS] $1"; }
 fail() { echo "  [FAIL] $1"; failures=$((failures + 1)); }
 
-echo "sdd-checkoff tests"
+echo "plan-checkoff tests"
 
 # Each test builds a throwaway git repo so sdd-workspace's `git rev-parse` works.
 new_repo() {
@@ -141,7 +141,7 @@ r=$(new_repo); write_plan "$r" leak
 write_ledger "$r" leak "Task 1: complete (commits 1111111..2222222, review clean)"
 p="$r/docs/superpowers/plans/leak.md"
 ( cd "$r" && "$CHECKOFF" docs/superpowers/plans/leak.md >/dev/null 2>&1 )
-leftover=$(find "$(dirname "$p")" -maxdepth 1 -name '.sdd-checkoff*' | head -1)
+leftover=$(find "$(dirname "$p")" -maxdepth 1 -name '.plan-checkoff*' | head -1)
 if [ -z "$leftover" ]; then pass "no temp file remains beside the plan after a flipping run"; else fail "no temp file remains beside the plan after a flipping run: $leftover"; fi
 
 # --- 9. foreign ledger refused, exit 3 ---
@@ -232,7 +232,7 @@ if [ "$n" = "2" ]; then pass "nested >=4-backtick fence behavior is pinned (obse
 # --- 12. parser agreement with task-brief on real plans ---
 # --print-range is a verbatim copy of task-brief's awk, so comparing against
 # it only proves that copy agrees with itself. Prove the main flipping pass
-# agrees instead: run sdd-checkoff for real on a scratch copy of each plan
+# agrees instead: run plan-checkoff for real on a scratch copy of each plan
 # and compare the boxes it actually flipped against task-brief's extracted
 # range for that task. None of these three plans have any pre-existing
 # `- [x]` box (verified separately), so every `- [x]` line found in the
@@ -266,8 +266,8 @@ if [ "$agree" = "1" ]; then pass "parser agreement with task-brief on real plans
 
 echo
 if [ "$failures" -eq 0 ]; then
-  echo "All sdd-checkoff tests passed"
+  echo "All plan-checkoff tests passed"
 else
-  echo "$failures sdd-checkoff test(s) failed"
+  echo "$failures plan-checkoff test(s) failed"
   exit 1
 fi
