@@ -253,16 +253,19 @@ write_ledger "$r" suffix "Task 1: complete (commits 1111111..2222222, review cle
 if [ "$rc" = "0" ] && [ "$(boxes_checked "$r/docs/superpowers/plans/suffix.md")" = "1" ]; then pass "line-range suffix is stripped before the existence check"; else fail "line-range suffix is stripped before the existence check (rc=$rc)"; fi
 
 # --- 23. Files lines inside a fence are ignored ---
+# The fixture's fence is built from a variable so this plan file itself never
+# nests one fence inside another (the toggle model would misread it).
 r=$(new_repo)
-cat > "$r/docs/superpowers/plans/fencedfiles.md" <<'PLAN'
+fence='```'
+cat > "$r/docs/superpowers/plans/fencedfiles.md" <<PLAN
 # Fenced Files Plan
 
 ### Task 1: First
 
-```markdown
+${fence}markdown
 **Files:**
-- Create: `src/from-a-fence.txt`
-```
+- Create: \`src/from-a-fence.txt\`
+${fence}
 
 - [ ] **Step 1: alpha**
 PLAN
