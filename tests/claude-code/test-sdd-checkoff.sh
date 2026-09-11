@@ -136,18 +136,13 @@ before=$(cksum < "$p")
 ( cd "$r" && "$CHECKOFF" docs/superpowers/plans/noledger.md >/dev/null 2>&1 ); rc=$?
 if [ "$rc" = "0" ] && [ "$before" = "$(cksum < "$p")" ]; then pass "absent ledger leaves the plan untouched, exits 0"; else fail "absent ledger leaves the plan untouched, exits 0"; fi
 
-# --- countfile does not leak on a flipping run ---
+# --- no temp file remains beside the plan after a flipping run ---
 r=$(new_repo); write_plan "$r" leak
 write_ledger "$r" leak "Task 1: complete (commits 1111111..2222222, review clean)"
-sysTmp=$(dirname "$(mktemp -u)")
-marker=$(mktemp)
+p="$r/docs/superpowers/plans/leak.md"
 ( cd "$r" && "$CHECKOFF" docs/superpowers/plans/leak.md >/dev/null 2>&1 )
-# -newer marker (created immediately before the run) rather than a before/after
-# directory diff, so unrelated tmp.* churn elsewhere in the shared system temp
-# dir can't produce a false failure.
-new_tmp=$(find "$sysTmp" -maxdepth 1 -name 'tmp.*' -type f -newer "$marker" 2>/dev/null | grep -vF "$marker" | sort)
-rm -f "$marker"
-if [ -z "$new_tmp" ]; then pass "countfile does not leak on a flipping run"; else fail "countfile leaks on a flipping run: $new_tmp"; fi
+leftover=$(find "$(dirname "$p")" -maxdepth 1 -name '.sdd-checkoff*' | head -1)
+if [ -z "$leftover" ]; then pass "no temp file remains beside the plan after a flipping run"; else fail "no temp file remains beside the plan after a flipping run: $leftover"; fi
 
 # --- 9. foreign ledger refused, exit 3 ---
 r=$(new_repo); write_plan "$r" mine
