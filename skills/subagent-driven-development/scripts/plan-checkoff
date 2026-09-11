@@ -174,13 +174,13 @@ root=$(git -C "$(dirname "$plan")" rev-parse --show-toplevel 2>/dev/null) \
 # ---- --done mode --------------------------------------------------------------
 
 if [ "$mode" = "done" ]; then
-  attested=$(printf '%s\n' $done_list | sort -un | tr '\n' ' ')
-  attested=${attested% }
   present=$(task_headings "$plan")
-  for n in $attested; do
+  for n in $done_list; do
     printf '%s\n' "$present" | grep -qx "$n" \
       || die "no 'Task $n' heading in $plan" 2
   done
+  attested=$(printf '%s\n' $done_list | sort -un | tr '\n' ' ')
+  attested=${attested% }
   flip_tasks
   exit "$rc"
 fi

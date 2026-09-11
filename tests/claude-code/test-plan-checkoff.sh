@@ -424,6 +424,12 @@ r=$(new_repo); write_plan "$r" done7
 ( cd "$r" && "$CHECKOFF" --done two docs/superpowers/plans/done7.md >/dev/null 2>&1 ); rc=$?
 if [ "$rc" = "2" ]; then pass "--done rejects a non-numeric task"; else fail "--done rejects a non-numeric task (rc=$rc)"; fi
 
+# --- --done 2 02: leading-zero duplicate is validated before deduping, exit 2 ---
+r=$(new_repo); write_plan "$r" leadingzero
+p="$r/docs/superpowers/plans/leadingzero.md"; before=$(cksum < "$p")
+err=$( cd "$r" && "$CHECKOFF" --done 2 02 docs/superpowers/plans/leadingzero.md 2>&1 >/dev/null ); rc=$?
+if [ "$rc" = "2" ] && [ "$before" = "$(cksum < "$p")" ] && printf '%s\n' "$err" | grep -q "no 'Task 02' heading"; then pass "--done 2 02 validates every entry before deduping, exit 2"; else fail "--done 2 02 validates every entry before deduping, exit 2 (rc=$rc): $err"; fi
+
 # --- 31. --verify: ticked task with an absent Create path, exit 4, file unchanged ---
 r=$(new_repo); write_plan "$r" ver1
 p="$r/docs/superpowers/plans/ver1.md"
