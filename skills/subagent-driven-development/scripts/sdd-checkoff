@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+# Reconcile an implementation plan's checkboxes from its SDD progress ledger.
+#
+# The ledger (.superpowers/sdd/<plan>/progress.md) is authoritative but
+# git-ignored and deleted at the end of a run; the plan file is tracked and
+# permanent. Without this script the durable record never reflects what
+# happened. Run at SDD setup (heals an aborted prior run) and immediately
+# before workspace deletion (captures the happy path).
+#
+# Usage: sdd-checkoff PLAN_FILE
+#        sdd-checkoff --print-range PLAN_FILE TASK_NUMBER   # debug/parity
+#
+# Fence handling is byte-identical to task-brief's toggle. That model does not
+# understand ~~~, indented, or >=4-backtick nested fences; see the spec's
+# "Fence model — stated limits". Parity with task-brief is the standard.
+set -euo pipefail
+
+die() { echo "sdd-checkoff: $*" >&2; exit "${2:-3}"; }
+
+# --print-range prints one task's range, for parity testing against task-brief.
+if [ "${1:-}" = "--print-range" ]; then
+  [ $# -eq 3 ] || { echo "usage: sdd-checkoff --print-range PLAN_FILE TASK_NUMBER" >&2; exit 2; }
+  [ -f "$2" ] || { echo "no such plan file: $2" >&2; exit 2; }
+  awk -v n="$3" '
+    /^```/ { infence = !infence }
+    !infence && /^#+[ \t]+Task[ \t]+[0-9]+/ {
+      intask = ($0 ~ ("^#+[ \t]+Task[ \t]+" n "([^0-9]|$)"))
+    }
+    intask { print }
+  ' "$2"
+  exit 0
+fi
+
+[ $# -eq 1 ] || { echo "usage: sdd-checkoff PLAN_FILE" >&2; exit 2; }
+plan=$1
+[ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
+
+dir=$("$(cd "$(dirname "$0")" && pwd)/sdd-workspace" "$plan")
+ledger="$dir/progress.md"
+
+if [ ! -f "$ledger" ]; then
+  echo "sdd-checkoff: no ledger at $ledger — nothing to reconcile" >&2
+  exit 0
+fi
+
+# Identity. The controller writes "# SDD ledger — plan: <path>" using whatever
+# path form it had; we may be invoked with another. Compare by slug, the same
+# key sdd-workspace uses for the directory. Strip CR so a CRLF ledger does not
+# refuse spuriously.
+first=$(head -n 1 "$ledger" | tr -d '\r')
+case "$first" in
+  '# SDD ledger'*) ;;
+  *) die "unrecognized ledger header in $ledger (expected '# SDD ledger — plan: <path>')" ;;
+esac
+ledger_slug=$(basename "${first##*: }" .md)
+plan_slug=$(basename "$plan" .md)
+[ "$ledger_slug" = "$plan_slug" ] \
+  || die "ledger at $ledger names plan '$ledger_slug', not '$plan_slug' — refusing"
+
+# Completed tasks: line-anchored, so a ruling that quotes "Task 3: complete"
+# in prose cannot mark a task done.
+completed=$(tr -d '\r' < "$ledger" \
+  | awk '/^Task [0-9]+: complete/ { t=$2; sub(/:$/,"",t); print t }' \
+  | sort -un | tr '\n' ',' )
+completed=${completed%,}
+
+if [ -z "$completed" ]; then
+  echo "checked off 0 task(s), 0 box(es) in $plan"
+  exit 0
+fi
+
+# Every completed task must exist as an unfenced heading, or refuse wholesale.
+present=$(awk '
+  /^```/ { infence = !infence; next }
+  !infence && /^#+[ \t]+Task[ \t]+[0-9]+/ { t=$0; sub(/^#+[ \t]+Task[ \t]+/,"",t); sub(/[^0-9].*$/,"",t); print t }
+' "$plan" | sort -un | tr '\n' ',')
+missing=""
+IFS=, read -r -a want <<< "$completed"
+for n in "${want[@]}"; do
+  case ",$present" in *",$n,"*) ;; *) missing="$missing $n" ;; esac
+done
+[ -z "$missing" ] || die "ledger names task(s)$missing with no matching heading in $plan — refusing (plan edited after the run?)"
+
+tmp=$(mktemp "$(dirname "$plan")/.sdd-checkoff.XXXXXX")
+countfile=$(mktemp)
+trap 'rm -f "$tmp" "$countfile"' EXIT
+
+# Single pass: transformed plan to $tmp, tally to $countfile. Counting inside
+# the same pass is what makes "tasks" mean "tasks flipped this run" rather than
+# "tasks the ledger lists".
+awk -v want="$completed" -v cf="$countfile" '
+  BEGIN { n = split(want, a, ","); for (i = 1; i <= n; i++) done[a[i]] = 1 }
+  /^```/ { infence = !infence }
+  !infence && /^#+[ \t]+Task[ \t]+[0-9]+/ {
+    t = $0; sub(/^#+[ \t]+Task[ \t]+/, "", t); sub(/[^0-9].*$/, "", t)
+    cur = t; active = (t in done)
+  }
+  !infence && active && /^[ \t]*- \[ \]/ {
+    sub(/- \[ \]/, "- [x]"); boxes++; if (!seen[cur]++) tasks++
+  }
+  { print }
+  END { print tasks + 0 "," boxes + 0 > cf }
+' "$plan" > "$tmp"
+
+counts=$(cat "$countfile")
+tasks=${counts%,*}
+boxes=${counts#*,}
+
+if [ "$boxes" -eq 0 ]; then
+  # Skip the mv entirely: replacing the file would change inode and mtime, and
+  # awk's print appends a trailing newline to a plan lacking one — a diff from
+  # a run that changed nothing.
+  echo "checked off 0 task(s), 0 box(es) in $plan"
+  exit 0
+fi
+
+mv "$tmp" "$plan"
+trap - EXIT
+echo "checked off $tasks task(s), $boxes box(es) in $plan"
