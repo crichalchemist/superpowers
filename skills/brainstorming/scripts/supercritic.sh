@@ -20,7 +20,8 @@
 #
 # Exit codes:
 #   0  review printed
-#   2  usage error, or the named source file does not exist
+#   2  usage error, the named source file does not exist, or the engine could
+#      not create the temporary file it measures piped input in
 #   3  feature off or mis-set — no conf, disabled, unverified, conf tracked by
 #      git, the git tracked-conf check unable to prove otherwise, a
 #      SUPERCRITIC_CMD that is empty or does not resolve to an executable file,
@@ -157,16 +158,22 @@ esac
 MAX_BYTES=100000
 if [ "$src" = "-" ]; then
   # Read at most MAX_BYTES+1 so an oversize stream is refused without being
-  # drained. The trailing X survives command substitution's newline stripping,
-  # so the count below is the true count of what was read — without it, a
-  # stream whose byte MAX_BYTES+1 is a newline would be silently truncated to
-  # MAX_BYTES and reviewed as if it were the whole document.
-  content=$(head -c "$(( MAX_BYTES + 1 ))"; printf 'X')
-  content=${content%X}
-  content_bytes=$(( $(printf '%s' "$content" | wc -c) ))
-  if [ "$content_bytes" -gt "$MAX_BYTES" ]; then
+  # drained, and measure it on disk. A buffered string cannot be measured
+  # honestly: command substitution discards NUL bytes, so 200000 NUL bytes
+  # counted as zero, sailed past the cap, and reached the CLI as an empty
+  # review section — which reads back as "review done, nothing to address".
+  # The temp file is the engine's own scratch: the CLI is still handed inline
+  # content and never a path, so the SAFETY INVARIANT above is unchanged.
+  tmp=$(mktemp "${TMPDIR:-/tmp}/supercritic.XXXXXX") \
+    || die "cannot create a temporary file to measure piped input" 2
+  # `|| :` so a failed cleanup cannot overwrite the exit code the contract promises.
+  trap 'rm -f "$tmp" || :' EXIT
+  head -c "$(( MAX_BYTES + 1 ))" >"$tmp"
+  stdin_bytes=$(( $(wc -c < "$tmp") ))
+  if [ "$stdin_bytes" -gt "$MAX_BYTES" ]; then
     die "content too large (more than ${MAX_BYTES} bytes) — narrow the diff or split the review" 6
   fi
+  content=$(cat "$tmp")
 else
   [ -f "$src" ] || { echo "supercritic: no such file: $src" >&2; exit 2; }
   src_bytes=$(( $(wc -c < "$src") ))

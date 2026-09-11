@@ -35,7 +35,7 @@ assert_not_contains() {
 hermetic_bin() {
   local dir=$1 util util_path
   mkdir -p "$dir"
-  for util in bash cat head sleep wc; do
+  for util in bash cat head mktemp rm sleep wc; do
     util_path=$(command -v "$util") || { echo "  [FAIL] hermetic_bin: no $util on PATH"; exit 1; }
     ln -sf "$util_path" "$dir/$util"
   done
@@ -215,6 +215,16 @@ assert_contains "$out" "REVIEW_MARKER" "untracked-conf run prints CLI output"
 out=$(head -c 120000 /dev/zero | tr '\0' 'a' | SUPERCRITIC_CONF="$TEST_ROOT/ok2.conf" "$ENGINE" "f" - 2>&1) && rc=0 || rc=$?
 assert_status "$rc" 6 "oversize content exits 6"
 assert_contains "$out" "too large" "oversize content message"
+
+# --- oversize content made of NUL bytes is refused too ---
+# Command substitution discards NUL bytes, so a buffered string undercounts what
+# was actually read: 200000 NUL bytes measured as 0 and sailed past the cap,
+# handing the CLI an empty review section and exiting 0 — "nothing to address".
+# The gate must measure the bytes read, not the string they became.
+out=$(head -c 200000 /dev/zero | SUPERCRITIC_CONF="$TEST_ROOT/ok2.conf" "$ENGINE" "f" - 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 6 "oversize NUL content exits 6"
+assert_contains "$out" "too large" "oversize NUL content message"
+assert_not_contains "$out" "REVIEW_MARKER" "NUL stream is refused, never reviewed as empty"
 
 # --- CLI exits 0 with no output: fail loud, not silent success ---
 cat >"$TEST_ROOT/silent.conf" <<CONF

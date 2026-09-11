@@ -10,7 +10,7 @@ so `SUPERCRITIC_CMD` should be just the command + print-mode flags — no repo
 access, no permission-skipping flags.
 
 Exit codes let a caller tell "turned off" from "broken": `0` review printed,
-`2` usage or missing file, `3` feature off or mis-set (no conf, disabled,
+`2` usage, missing file, or an engine scratch-file failure, `3` feature off or mis-set (no conf, disabled,
 unverified, bad `SUPERCRITIC_CMD`, bad `SUPERCRITIC_TIMEOUT`), `4` CLI timed
 out, `5` CLI failed or returned nothing, `6` content too large. Treat `3` as
 skip; treat `4`, `5` and `6` as real failures worth surfacing. A CLI that exits
