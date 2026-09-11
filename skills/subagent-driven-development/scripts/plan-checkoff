@@ -1,45 +1,167 @@
 #!/usr/bin/env bash
-# Reconcile an implementation plan's checkboxes from its SDD progress ledger.
+# Reconcile an implementation plan's checkboxes from evidence of completion,
+# and verify every flip against the task's own Files: block.
 #
-# The ledger (.superpowers/sdd/<plan>/progress.md) is authoritative but
-# git-ignored and deleted at the end of a run; the plan file is tracked and
-# permanent. Without this script the durable record never reflects what
-# happened. Run at SDD setup (heals an aborted prior run) and immediately
-# before workspace deletion (captures the happy path).
+# Attestation, never inference:
+#   plan-checkoff PLAN_FILE                    SDD: tasks the ledger marks complete
+#   plan-checkoff --print-range PLAN_FILE N    debug/parity: print one task's range
 #
-# Usage: plan-checkoff PLAN_FILE
-#        plan-checkoff --print-range PLAN_FILE TASK_NUMBER   # debug/parity
+# A task verifies when every path in its Files: block (unfenced lines of the
+# form "- Create: `p`", "- Modify: `p`", "- Test: `p`", optional :LINES suffix)
+# exists under the repo root that holds the plan. A task listing no files is
+# refused, not flipped: an unverifiable tick is decoration. One missing path
+# refuses the whole task; other tasks in the run still proceed.
+#
+# Exit codes: 0 every attested task verified and flipped (or nothing to do)
+#             2 usage, missing plan, plan outside a git repository
+#             3 ledger refused (foreign, malformed, names an absent task)
+#             4 one or more attested tasks not flipped; others still processed
 #
 # Fence handling is byte-identical to task-brief's toggle. That model does not
 # understand ~~~, indented, or >=4-backtick nested fences; see the spec's
 # "Fence model — stated limits". Parity with task-brief is the standard.
 set -euo pipefail
 
-die() { echo "plan-checkoff: $*" >&2; exit 3; }
+die() { echo "plan-checkoff: $1" >&2; exit "$2"; }
+say() { echo "plan-checkoff: $*" >&2; }
 
-# --print-range prints one task's range, for parity testing against task-brief.
-if [ "${1:-}" = "--print-range" ]; then
-  [ $# -eq 3 ] || { echo "usage: plan-checkoff --print-range PLAN_FILE TASK_NUMBER" >&2; exit 2; }
-  [ -f "$2" ] || { echo "no such plan file: $2" >&2; exit 2; }
-  awk -v n="$3" '
+usage() {
+  echo "usage: plan-checkoff PLAN_FILE" >&2
+  echo "       plan-checkoff --print-range PLAN_FILE TASK_NUMBER" >&2
+  exit 2
+}
+
+# Task numbers present as unfenced headings, one per line, ascending.
+task_headings() {
+  awk '
+    /^```/ { infence = !infence; next }
+    !infence && /^#+[ \t]+Task[ \t]+[0-9]+/ { t=$0; sub(/^#+[ \t]+Task[ \t]+/,"",t); sub(/[^0-9].*$/,"",t); print t }
+  ' "$1" | sort -un
+}
+
+# Paths a task's Files: block names, one per line, :LINES suffix stripped.
+task_files() {  # PLAN N
+  awk -v n="$2" '
+    /^```/ { infence = !infence; next }
+    !infence && /^#+[ \t]+Task[ \t]+[0-9]+/ { intask = ($0 ~ ("^#+[ \t]+Task[ \t]+" n "([^0-9]|$)")) }
+    intask && !infence && /^- (Create|Modify|Test): `[^`]+`/ {
+      p = $0; sub(/^- (Create|Modify|Test): `/, "", p); sub(/`.*$/, "", p)
+      sub(/:[0-9]+(-[0-9]+)?$/, "", p); print p
+    }
+  ' "$1"
+}
+
+# Tasks with at least one ticked box, one per line, ascending.
+ticked_tasks() {
+  awk '
+    /^```/ { infence = !infence; next }
+    !infence && /^#+[ \t]+Task[ \t]+[0-9]+/ { t=$0; sub(/^#+[ \t]+Task[ \t]+/,"",t); sub(/[^0-9].*$/,"",t); cur=t }
+    !infence && cur != "" && /^[ \t]*- \[[xX]\]/ { if (!seen[cur]++) print cur }
+  ' "$1" | sort -un
+}
+
+# verify_task N -> VERDICT is "ok", "nofiles", or "missing <p> [<p>…]".
+verify_task() {
+  local n=$1 p paths missing=""
+  paths=$(task_files "$plan" "$n")
+  if [ -z "$paths" ]; then VERDICT=nofiles; return 0; fi
+  while IFS= read -r p; do
+    [ -e "$root/$p" ] || missing="$missing $p"
+  done <<< "$paths"
+  if [ -n "$missing" ]; then VERDICT="missing$missing"; else VERDICT=ok; fi
+}
+
+# flip_tasks: verify each task in $attested (space-separated), flip the ones
+# that verify, report per task on stderr, summary on stdout. Sets rc to 4 if
+# any task was refused.
+flip_tasks() {
+  # tmp and countfile are deliberately NOT local: the EXIT trap below expands
+  # them after this function has returned, and a local would be empty by then,
+  # leaving the count file beside the plan (the leak test catches exactly that).
+  local n flip="" t k tasks=0 boxes=0
+  rc=0
+  for n in $attested; do
+    verify_task "$n"
+    case "$VERDICT" in
+      ok) flip="$flip,$n" ;;
+      nofiles) say "Task $n: unverified: lists no files — not flipped"; rc=4 ;;
+      missing*) say "Task $n: missing:${VERDICT#missing} — not flipped"; rc=4 ;;
+    esac
+  done
+  flip=${flip#,}
+  if [ -z "$flip" ]; then
+    echo "checked off 0 task(s), 0 box(es) in $plan"
+    return 0
+  fi
+
+  tmp=$(mktemp "$(dirname "$plan")/.plan-checkoff.XXXXXX")
+  cp -p "$plan" "$tmp"
+  # Beside the plan, not in shared temp: the leak test scans this directory, and a
+  # bare mktemp in /var/folders made that test flaky under concurrent temp churn.
+  countfile=$(mktemp "$(dirname "$plan")/.plan-checkoff-count.XXXXXX")
+  trap 'rm -f "$tmp" "$countfile"' EXIT
+
+  # Single pass: transformed plan to $tmp, per-task tally to $countfile.
+  awk -v want="$flip" -v cf="$countfile" '
+    BEGIN { n = split(want, a, ","); for (i = 1; i <= n; i++) { done[a[i]] = 1; cnt[a[i]] = 0 } }
     /^```/ { infence = !infence }
     !infence && /^#+[ \t]+Task[ \t]+[0-9]+/ {
-      intask = ($0 ~ ("^#+[ \t]+Task[ \t]+" n "([^0-9]|$)"))
+      t = $0; sub(/^#+[ \t]+Task[ \t]+/, "", t); sub(/[^0-9].*$/, "", t)
+      cur = t; active = (t in done)
     }
-    intask { print }
-  ' "$2"
-  exit 0
-fi
+    !infence && active && /^[ \t]*- \[ \]/ { sub(/- \[ \]/, "- [x]"); cnt[cur]++ }
+    { print }
+    END { for (t in cnt) print t "," cnt[t] > cf }
+  ' "$plan" > "$tmp"
 
-[ $# -eq 1 ] || { echo "usage: plan-checkoff PLAN_FILE" >&2; exit 2; }
+  while IFS=, read -r t k; do
+    if [ "$k" -gt 0 ]; then
+      say "Task $t: flipped $k box(es)"; tasks=$((tasks + 1)); boxes=$((boxes + k))
+    else
+      say "Task $t: nothing to flip"
+    fi
+  done < <(sort -n "$countfile")
+
+  if [ "$boxes" -eq 0 ]; then
+    # Skip the mv entirely: replacing the file would change inode and mtime, and
+    # awk's print appends a trailing newline to a plan lacking one — a diff from
+    # a run that changed nothing.
+    echo "checked off 0 task(s), 0 box(es) in $plan"
+    return 0
+  fi
+  mv "$tmp" "$plan"
+  echo "checked off $tasks task(s), $boxes box(es) in $plan"
+}
+
+# ---- argument handling ------------------------------------------------------
+
+case "${1:-}" in
+  --print-range)
+    [ $# -eq 3 ] || usage
+    [ -f "$2" ] || die "no such plan file: $2" 2
+    awk -v n="$3" '
+      /^```/ { infence = !infence }
+      !infence && /^#+[ \t]+Task[ \t]+[0-9]+/ {
+        intask = ($0 ~ ("^#+[ \t]+Task[ \t]+" n "([^0-9]|$)"))
+      }
+      intask { print }
+    ' "$2"
+    exit 0 ;;
+  -*) usage ;;
+esac
+[ $# -eq 1 ] || usage
 plan=$1
-[ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
+[ -f "$plan" ] || die "no such plan file: $plan" 2
+root=$(git -C "$(dirname "$plan")" rev-parse --show-toplevel 2>/dev/null) \
+  || die "$plan is not inside a git repository — Files: paths resolve against the repo root" 2
+
+# ---- ledger mode --------------------------------------------------------------
 
 dir=$("$(cd "$(dirname "$0")" && pwd)/sdd-workspace" "$plan")
 ledger="$dir/progress.md"
 
 if [ ! -f "$ledger" ]; then
-  echo "plan-checkoff: no ledger at $ledger — nothing to reconcile" >&2
+  say "no ledger at $ledger — nothing to reconcile"
   exit 0
 fi
 
@@ -50,72 +172,32 @@ fi
 first=$(head -n 1 "$ledger" | tr -d '\r')
 case "$first" in
   '# SDD ledger'*) ;;
-  *) die "unrecognized ledger header in $ledger (expected '# SDD ledger — plan: <path>')" ;;
+  *) die "unrecognized ledger header in $ledger (expected '# SDD ledger — plan: <path>')" 3 ;;
 esac
 ledger_slug=$(basename "${first##*: }" .md)
 plan_slug=$(basename "$plan" .md)
 [ "$ledger_slug" = "$plan_slug" ] \
-  || die "ledger at $ledger names plan '$ledger_slug', not '$plan_slug' — refusing"
+  || die "ledger at $ledger names plan '$ledger_slug', not '$plan_slug' — refusing" 3
 
 # Completed tasks: line-anchored, so a ruling that quotes "Task 3: complete"
 # in prose cannot mark a task done.
-completed=$(tr -d '\r' < "$ledger" \
+attested=$(tr -d '\r' < "$ledger" \
   | awk '/^Task [0-9]+: complete/ { t=$2; sub(/:$/,"",t); print t }' \
-  | sort -un | tr '\n' ',' )
-completed=${completed%,}
+  | sort -un | tr '\n' ' ')
+attested=${attested% }
 
-if [ -z "$completed" ]; then
+if [ -z "$attested" ]; then
   echo "checked off 0 task(s), 0 box(es) in $plan"
   exit 0
 fi
 
 # Every completed task must exist as an unfenced heading, or refuse wholesale.
-present=$(awk '
-  /^```/ { infence = !infence; next }
-  !infence && /^#+[ \t]+Task[ \t]+[0-9]+/ { t=$0; sub(/^#+[ \t]+Task[ \t]+/,"",t); sub(/[^0-9].*$/,"",t); print t }
-' "$plan" | sort -un | tr '\n' ',')
+present=$(task_headings "$plan")
 missing=""
-IFS=, read -r -a want <<< "$completed"
-for n in "${want[@]}"; do
-  case ",$present" in *",$n,"*) ;; *) missing="$missing $n" ;; esac
+for n in $attested; do
+  printf '%s\n' "$present" | grep -qx "$n" || missing="$missing $n"
 done
-[ -z "$missing" ] || die "ledger names task(s)$missing with no matching heading in $plan — refusing (plan edited after the run?)"
+[ -z "$missing" ] || die "ledger names task(s)$missing with no matching heading in $plan — refusing (plan edited after the run?)" 3
 
-tmp=$(mktemp "$(dirname "$plan")/.plan-checkoff.XXXXXX")
-cp -p "$plan" "$tmp"
-# Beside the plan, not in shared temp: the leak test scans this directory, and a
-# bare mktemp in /var/folders made that test flaky under concurrent temp churn.
-countfile=$(mktemp "$(dirname "$plan")/.plan-checkoff-count.XXXXXX")
-trap 'rm -f "$tmp" "$countfile"' EXIT
-
-# Single pass: transformed plan to $tmp, tally to $countfile. Counting inside
-# the same pass is what makes "tasks" mean "tasks flipped this run" rather than
-# "tasks the ledger lists".
-awk -v want="$completed" -v cf="$countfile" '
-  BEGIN { n = split(want, a, ","); for (i = 1; i <= n; i++) done[a[i]] = 1 }
-  /^```/ { infence = !infence }
-  !infence && /^#+[ \t]+Task[ \t]+[0-9]+/ {
-    t = $0; sub(/^#+[ \t]+Task[ \t]+/, "", t); sub(/[^0-9].*$/, "", t)
-    cur = t; active = (t in done)
-  }
-  !infence && active && /^[ \t]*- \[ \]/ {
-    sub(/- \[ \]/, "- [x]"); boxes++; if (!seen[cur]++) tasks++
-  }
-  { print }
-  END { print tasks + 0 "," boxes + 0 > cf }
-' "$plan" > "$tmp"
-
-counts=$(cat "$countfile")
-tasks=${counts%,*}
-boxes=${counts#*,}
-
-if [ "$boxes" -eq 0 ]; then
-  # Skip the mv entirely: replacing the file would change inode and mtime, and
-  # awk's print appends a trailing newline to a plan lacking one — a diff from
-  # a run that changed nothing.
-  echo "checked off 0 task(s), 0 box(es) in $plan"
-  exit 0
-fi
-
-mv "$tmp" "$plan"
-echo "checked off $tasks task(s), $boxes box(es) in $plan"
+flip_tasks
+exit "$rc"

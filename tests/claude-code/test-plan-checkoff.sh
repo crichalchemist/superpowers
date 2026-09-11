@@ -21,17 +21,25 @@ new_repo() {
   echo "$d"
 }
 
-# write_plan REPO NAME -- writes a two-task plan, 2 boxes each.
+# write_plan REPO NAME -- writes a two-task plan, 2 boxes each, whose Files:
+# blocks name paths that exist in REPO (the predicate must pass by default).
 write_plan() {
+  mkdir -p "$1/src"; : > "$1/src/alpha.txt"; : > "$1/src/gamma.txt"
   cat > "$1/docs/superpowers/plans/$2.md" <<'PLAN'
 # Demo Plan
 
 ### Task 1: First
 
+**Files:**
+- Create: `src/alpha.txt`
+
 - [ ] **Step 1: alpha**
 - [ ] **Step 2: beta**
 
 ### Task 2: Second
+
+**Files:**
+- Create: `src/gamma.txt`
 
 - [ ] **Step 1: gamma**
 - [ ] **Step 2: delta**
@@ -45,6 +53,9 @@ write_ledger() {
   mkdir -p "$dir"
   { echo "# SDD ledger — plan: docs/superpowers/plans/$slug.md"; printf '%s\n' "$@"; } > "$dir/progress.md"
 }
+
+# touch_in REPO PATH -- create an empty file at REPO/PATH, making parents.
+touch_in() { mkdir -p "$(dirname "$1/$2")"; : > "$1/$2"; }
 
 boxes_checked() { grep -c '^\s*- \[x\]' "$1" || true; }
 boxes_open()    { grep -c '^\s*- \[ \]' "$1" || true; }
@@ -62,10 +73,14 @@ if [ "$mode_before" = "$mode_after" ]; then pass "plan file mode is preserved ac
 
 # --- 3. fenced checkbox survives / 13. inline prose checkbox survives ---
 r=$(new_repo)
+touch_in "$r" src/fence.txt
 cat > "$r/docs/superpowers/plans/fence.md" <<'PLAN'
 # Fence Plan
 
 ### Task 1: First
+
+**Files:**
+- Create: `src/fence.txt`
 
 - [ ] **Step 1: real**
 
@@ -83,10 +98,14 @@ if grep -q "shows \`- \[ \]\` before" "$p"; then pass "inline prose checkbox is 
 
 # --- 4. fenced Task heading does not split a task ---
 r=$(new_repo)
+touch_in "$r" src/fh.txt
 cat > "$r/docs/superpowers/plans/fh.md" <<'PLAN'
 # Fenced Heading Plan
 
 ### Task 1: First
+
+**Files:**
+- Create: `src/fh.txt`
 
 ```markdown
 ### Task 2: not a real boundary
@@ -100,14 +119,21 @@ if [ "$(boxes_checked "$r/docs/superpowers/plans/fh.md")" = "1" ]; then pass "fe
 
 # --- 5. Task 1 does not flip Task 10 ---
 r=$(new_repo)
+touch_in "$r" src/one.txt; touch_in "$r" src/ten.txt
 cat > "$r/docs/superpowers/plans/ten.md" <<'PLAN'
 # Ten Plan
 
 ### Task 1: First
 
+**Files:**
+- Create: `src/one.txt`
+
 - [ ] **Step 1: one**
 
 ### Task 10: Tenth
+
+**Files:**
+- Create: `src/ten.txt`
 
 - [ ] **Step 1: ten**
 PLAN
@@ -200,10 +226,14 @@ if [ "$rc" = "0" ]; then pass "CRLF ledger identity does not refuse spuriously";
 
 # --- 19. nested >=4-backtick fence: documented toggle limitation ---
 r=$(new_repo)
+touch_in "$r" src/nested.txt
 cat > "$r/docs/superpowers/plans/nested.md" <<'PLAN'
 # Nested Fence Plan
 
 ### Task 1: First
+
+**Files:**
+- Create: `src/nested.txt`
 
 ````markdown
 ```bash
@@ -225,6 +255,88 @@ write_ledger "$r" nested "Task 1: complete (commits fffffff..0000000, review cle
 n=$(boxes_checked "$r/docs/superpowers/plans/nested.md")
 if [ "$n" = "2" ]; then pass "nested >=4-backtick fence behavior is pinned (observed: $n)"; else fail "nested fence pinned (expected 2, observed: $n)"; fi
 
+# --- 20. ledgered task with a missing Test path is not flipped, others are, exit 4 ---
+r=$(new_repo); write_plan "$r" pred
+cat >> "$r/docs/superpowers/plans/pred.md" <<'PLAN'
+
+### Task 3: Third
+
+**Files:**
+- Create: `src/third.txt`
+- Test: `tests/third_test.txt`
+
+- [ ] **Step 1: epsilon**
+PLAN
+touch_in "$r" src/third.txt
+write_ledger "$r" pred \
+  "Task 1: complete (commits 1111111..2222222, review clean)" \
+  "Task 3: complete (commits 3333333..4444444, review clean)"
+p="$r/docs/superpowers/plans/pred.md"
+err=$( cd "$r" && "$CHECKOFF" docs/superpowers/plans/pred.md 2>&1 >/dev/null ); rc=$?
+if [ "$rc" = "4" ]; then pass "missing Test path exits 4"; else fail "missing Test path exits 4 (got $rc)"; fi
+if grep -q '^- \[x\] \*\*Step 1: alpha' "$p"; then pass "verified task still flips alongside a refused one"; else fail "verified task still flips alongside a refused one"; fi
+if grep -q '^- \[ \] \*\*Step 1: epsilon' "$p"; then pass "task with a missing path is not flipped"; else fail "task with a missing path is not flipped"; fi
+if printf '%s\n' "$err" | grep -q 'Task 3: missing: tests/third_test.txt'; then pass "missing path is named on stderr"; else fail "missing path is named on stderr: $err"; fi
+# rerun after creating the file flips it, exit 0
+touch_in "$r" tests/third_test.txt
+( cd "$r" && "$CHECKOFF" docs/superpowers/plans/pred.md >/dev/null 2>&1 ); rc=$?
+if [ "$rc" = "0" ] && grep -q '^- \[x\] \*\*Step 1: epsilon' "$p"; then pass "rerun after the path exists flips the task, exit 0"; else fail "rerun after the path exists flips the task, exit 0 (rc=$rc)"; fi
+
+# --- 21. ledgered task with no Files lines is refused, exit 4, plan untouched ---
+r=$(new_repo)
+cat > "$r/docs/superpowers/plans/nofiles.md" <<'PLAN'
+# No Files Plan
+
+### Task 1: First
+
+- [ ] **Step 1: alpha**
+PLAN
+write_ledger "$r" nofiles "Task 1: complete (commits 1111111..2222222, review clean)"
+p="$r/docs/superpowers/plans/nofiles.md"; before=$(cksum < "$p")
+err=$( cd "$r" && "$CHECKOFF" docs/superpowers/plans/nofiles.md 2>&1 >/dev/null ); rc=$?
+if [ "$rc" = "4" ] && [ "$before" = "$(cksum < "$p")" ]; then pass "task listing no files is refused, plan untouched, exit 4"; else fail "task listing no files is refused, plan untouched, exit 4 (rc=$rc)"; fi
+if printf '%s\n' "$err" | grep -q 'Task 1: unverified: lists no files'; then pass "refusal says unverified"; else fail "refusal says unverified: $err"; fi
+
+# --- 22. Modify path with a line suffix is stripped before the existence check ---
+r=$(new_repo)
+cat > "$r/docs/superpowers/plans/suffix.md" <<'PLAN'
+# Suffix Plan
+
+### Task 1: First
+
+**Files:**
+- Modify: `src/existing.txt:12-40`
+- Modify: `src/other.txt:7`
+
+- [ ] **Step 1: alpha**
+PLAN
+touch_in "$r" src/existing.txt; touch_in "$r" src/other.txt
+write_ledger "$r" suffix "Task 1: complete (commits 1111111..2222222, review clean)"
+( cd "$r" && "$CHECKOFF" docs/superpowers/plans/suffix.md >/dev/null 2>&1 ); rc=$?
+if [ "$rc" = "0" ] && [ "$(boxes_checked "$r/docs/superpowers/plans/suffix.md")" = "1" ]; then pass "line-range suffix is stripped before the existence check"; else fail "line-range suffix is stripped before the existence check (rc=$rc)"; fi
+
+# --- 23. Files lines inside a fence are ignored ---
+# The fixture's fence is built from a variable so this plan file itself never
+# nests one fence inside another (the toggle model would misread it).
+r=$(new_repo)
+fence='```'
+cat > "$r/docs/superpowers/plans/fencedfiles.md" <<PLAN
+# Fenced Files Plan
+
+### Task 1: First
+
+${fence}markdown
+**Files:**
+- Create: \`src/from-a-fence.txt\`
+${fence}
+
+- [ ] **Step 1: alpha**
+PLAN
+write_ledger "$r" fencedfiles "Task 1: complete (commits 1111111..2222222, review clean)"
+touch_in "$r" src/from-a-fence.txt
+( cd "$r" && "$CHECKOFF" docs/superpowers/plans/fencedfiles.md >/dev/null 2>&1 ); rc=$?
+if [ "$rc" = "4" ]; then pass "Files lines inside a fence do not count as evidence"; else fail "Files lines inside a fence do not count as evidence (rc=$rc)"; fi
+
 # --- 11. usage / missing plan ---
 ( "$CHECKOFF" >/dev/null 2>&1 ); if [ "$?" = "2" ]; then pass "no args exits 2"; else fail "no args exits 2"; fi
 ( "$CHECKOFF" /nope/missing.md >/dev/null 2>&1 ); if [ "$?" = "2" ]; then pass "missing plan exits 2"; else fail "missing plan exits 2"; fi
@@ -241,15 +353,23 @@ if [ "$n" = "2" ]; then pass "nested >=4-backtick fence behavior is pinned (obse
 # outside the real task range, e.g. an embedded fixture doc — verified true
 # for tasks 1-3 today; a plan edit adding one would need this test revisited.)
 agree=1
+parity_runs=0
 for f in 2026-06-09-sdd-task-scoped-review-dispatch 2026-07-06-sdd-plan-scoped-workspace 2026-07-15-sdd-fix-loop-redesign; do
   plan="$REPO_ROOT/docs/superpowers/plans/$f.md"
   [ -f "$plan" ] || continue
   for n in 1 2 3; do
     brief=$(mktemp)
     if "$TASK_BRIEF" "$plan" "$n" "$brief" >/dev/null 2>&1; then
+      # A task that lists no files is refused by design; parity is only
+      # meaningful for tasks the predicate can pass.
+      if ! grep -qE '^- (Create|Modify|Test): `' "$brief"; then rm -f "$brief"; continue; fi
       r=$(new_repo)
       cp "$plan" "$r/docs/superpowers/plans/$f.md"
+      # Materialize every path the whole plan lists so any task's predicate passes.
+      grep -oE '^- (Create|Modify|Test): `[^`]+`' "$plan" | sed -E 's/^- [A-Za-z]+: `//; s/`$//; s/:[0-9]+(-[0-9]+)?$//' \
+        | while IFS= read -r rel; do touch_in "$r" "$rel"; done
       write_ledger "$r" "$f" "Task $n: complete (commits 0000000..1111111, review clean)"
+      parity_runs=$((parity_runs + 1))
       copy="$r/docs/superpowers/plans/$f.md"
       ( cd "$r" && "$CHECKOFF" "docs/superpowers/plans/$f.md" >/dev/null 2>&1 )
       flipped=$(grep '^\s*- \[x\]' "$copy" | sed 's/^\([[:space:]]*\)- \[x\]/\1- [ ]/' | sort)
@@ -262,7 +382,7 @@ for f in 2026-06-09-sdd-task-scoped-review-dispatch 2026-07-06-sdd-plan-scoped-w
     rm -f "$brief"
   done
 done
-if [ "$agree" = "1" ]; then pass "parser agreement with task-brief on real plans"; else fail "parser agreement with task-brief on real plans"; fi
+if [ "$agree" = "1" ] && [ "$parity_runs" -gt 0 ]; then pass "parser agreement with task-brief on real plans ($parity_runs runs)"; else fail "parser agreement with task-brief on real plans (agree=$agree runs=$parity_runs)"; fi
 
 echo
 if [ "$failures" -eq 0 ]; then
