@@ -82,6 +82,7 @@ done
 [ -z "$missing" ] || die "ledger names task(s)$missing with no matching heading in $plan — refusing (plan edited after the run?)"
 
 tmp=$(mktemp "$(dirname "$plan")/.sdd-checkoff.XXXXXX")
+cp -p "$plan" "$tmp"
 countfile=$(mktemp)
 trap 'rm -f "$tmp" "$countfile"' EXIT
 
@@ -115,5 +116,4 @@ if [ "$boxes" -eq 0 ]; then
 fi
 
 mv "$tmp" "$plan"
-trap - EXIT
 echo "checked off $tasks task(s), $boxes box(es) in $plan"
