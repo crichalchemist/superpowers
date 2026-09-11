@@ -72,6 +72,16 @@ exit 0
 STUB
 chmod +x "$TEST_ROOT/silent-cli"
 
+# Stub CLI: forks a grandchild that would outlive a single-pid kill, records
+# its pid, then hangs so the timeout has to fire (process-group kill test).
+cat >"$TEST_ROOT/fork-cli" <<'STUB'
+#!/usr/bin/env bash
+sleep 60 &
+echo "$!" >"$GC_PIDFILE"
+sleep 60
+STUB
+chmod +x "$TEST_ROOT/fork-cli"
+
 echo "supercritic engine tests"
 
 # --- happy path: prints the review, passes focus+content through ---
@@ -252,6 +262,33 @@ assert_contains "$out" "not found on PATH" "unresolvable cmd message"
 out=$(printf 'x' | SUPERCRITIC_CONF="$conf" "$ENGINE" "f" - 2>&1) && rc=0 || rc=$?
 assert_status "$rc" 0 "absolute SUPERCRITIC_CMD still works"
 assert_not_contains "$out" "resolved" "absolute SUPERCRITIC_CMD prints no resolution line"
+
+# --- bash timeout fallback: kills the grandchild too, not just the CLI ---
+# PATH is the hermetic bin dir ALONE, so neither timeout nor gtimeout is
+# findable and the bash fallback is the path actually under test.
+FB_BIN="$TEST_ROOT/fb-bin"
+hermetic_bin "$FB_BIN"
+cat >"$TEST_ROOT/fb.conf" <<CONF
+SUPERCRITIC_CMD=("$TEST_ROOT/fork-cli")
+SUPERCRITIC_ENABLED=1
+SUPERCRITIC_VERIFIED=1
+SUPERCRITIC_TIMEOUT=1
+CONF
+GC_PIDFILE="$TEST_ROOT/gc.pid"
+rm -f "$GC_PIDFILE"
+start=$(date +%s)
+out=$(PATH="$FB_BIN" GC_PIDFILE="$GC_PIDFILE" SUPERCRITIC_CONF="$TEST_ROOT/fb.conf" \
+  "$BASH" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
+elapsed=$(( $(date +%s) - start ))
+assert_status "$rc" 1 "timeout fallback exits 1"
+assert_contains "$out" "timed out" "timeout fallback message"
+if [ "$elapsed" -le 5 ]; then pass "timeout fallback fires fast (<=5s)"; else fail "timeout fallback too slow (${elapsed}s)"; fi
+sleep 1
+gc_pid=$(cat "$GC_PIDFILE" 2>/dev/null || true)
+if [ -n "$gc_pid" ]; then pass "fork stub recorded its grandchild pid"
+else fail "fork stub recorded its grandchild pid"; fi
+if [ -n "$gc_pid" ] && ! kill -0 "$gc_pid" 2>/dev/null; then pass "fallback kills the forked grandchild too"
+else fail "fallback kills the forked grandchild too"; kill -KILL "$gc_pid" 2>/dev/null || true; fi
 
 if [ "$FAILURES" -gt 0 ]; then echo "$FAILURES supercritic engine test(s) failed"; exit 1; fi
 echo "All supercritic engine tests passed"

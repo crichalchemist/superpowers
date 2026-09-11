@@ -107,15 +107,21 @@ run_with_timeout() {
   elif command -v gtimeout >/dev/null 2>&1; then
     gtimeout -k 5 "$secs" "$@" </dev/null
   else
-    # Fallback: TERM hits the launched process. If a CLI forks a long-lived
-    # grandchild, that child may outlive the kill — prefer real `timeout`/`gtimeout`.
+    # Fallback: run the CLI in its own process group (set -m) so the watcher can
+    # signal the WHOLE group. A CLI that forks a long-lived grandchild would
+    # otherwise outlive a kill aimed at its pid alone — and that grandchild
+    # inherits our stdout, so it holds the output pipe open and stalls the
+    # caller's capture long past the timeout.
+    local pid watcher rc=0
+    set -m
     "$@" </dev/null &
-    local pid=$!
+    pid=$!
+    set +m
     # Watcher must not inherit our stdout: when the engine's output is being
     # captured, an orphaned sleep holding the pipe would stall the capture.
-    ( sleep "$secs"; kill -TERM "$pid" 2>/dev/null ) >/dev/null 2>&1 &
-    local watcher=$!
-    local rc=0
+    # TERM then KILL after the same 5-second grace the GNU path uses.
+    ( sleep "$secs"; kill -TERM -- -"$pid" 2>/dev/null; sleep 5; kill -KILL -- -"$pid" 2>/dev/null ) >/dev/null 2>&1 &
+    watcher=$!
     wait "$pid" 2>/dev/null || rc=$?
     kill -TERM "$watcher" 2>/dev/null || true
     return "$rc"
