@@ -456,6 +456,14 @@ r=$(new_repo); write_plan "$r" ver4; rm "$r/src/gamma.txt"
 ( cd "$r" && "$CHECKOFF" --verify docs/superpowers/plans/ver4.md >/dev/null 2>&1 ); rc=$?
 if [ "$rc" = "0" ]; then pass "--verify ignores tasks with no ticked box"; else fail "--verify ignores tasks with no ticked box (rc=$rc)"; fi
 
+# --- ledger resolution follows the plan's own repo, not CWD's ---
+a=$(new_repo)
+b=$(new_repo); write_plan "$b" foreignroot
+write_ledger "$b" foreignroot "Task 1: complete (commits 1111111..2222222, review clean)"
+p="$b/docs/superpowers/plans/foreignroot.md"
+( cd "$a" && "$CHECKOFF" "$b/docs/superpowers/plans/foreignroot.md" >/dev/null 2>&1 ); rc=$?
+if [ "$rc" = "0" ] && [ "$(boxes_checked "$p")" = "2" ] && [ ! -e "$a/.superpowers" ]; then pass "ledger resolves from the plan's own repo, not CWD"; else fail "ledger resolves from the plan's own repo, not CWD (rc=$rc)"; fi
+
 # --- 11. usage / missing plan ---
 ( "$CHECKOFF" >/dev/null 2>&1 ); if [ "$?" = "2" ]; then pass "no args exits 2"; else fail "no args exits 2"; fi
 ( "$CHECKOFF" /nope/missing.md >/dev/null 2>&1 ); if [ "$?" = "2" ]; then pass "missing plan exits 2"; else fail "missing plan exits 2"; fi

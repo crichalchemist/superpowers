@@ -24,6 +24,8 @@
 # "Fence model — stated limits". Parity with task-brief is the standard.
 set -euo pipefail
 
+script_dir=$(cd "$(dirname "$0")" && pwd)
+
 die() { echo "plan-checkoff: $1" >&2; exit "$2"; }
 say() { echo "plan-checkoff: $*" >&2; }
 
@@ -201,7 +203,8 @@ fi
 
 # ---- ledger mode --------------------------------------------------------------
 
-dir=$("$(cd "$(dirname "$0")" && pwd)/sdd-workspace" "$plan")
+dir=$(cd "$(dirname "$plan")" && "$script_dir/sdd-workspace" "$(basename "$plan")") \
+  || die "could not resolve the SDD workspace for $plan" 3
 ledger="$dir/progress.md"
 
 if [ ! -f "$ledger" ]; then
