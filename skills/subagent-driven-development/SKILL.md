@@ -485,7 +485,12 @@ made in secret.
 
 Before deleting the workspace, run `scripts/sdd-checkoff PLAN_FILE` one last
 time — deletion destroys the ledger, so this is the last moment the plan's
-checkboxes can be reconciled from it.
+checkboxes can be reconciled from it. Inspect the resulting `git diff` of the
+plan before committing: the script cannot detect a plan whose quoted
+fixtures put fences inside fences, and a box flipped inside quoted content
+is a corruption to revert by hand. Commit the reconciled plan — the
+check-off dirties a tracked file, and finishing-a-development-branch refuses
+to remove a dirty worktree.
 
 When the final whole-branch review is clean and its fixes are merged,
 delete this plan's workspace (`rm -rf <workspace>`) — the git history is
