@@ -319,17 +319,18 @@ else fail "fork stub recorded its grandchild pid"; fi
 if [ -n "$gc_pid" ] && ! kill -0 "$gc_pid" 2>/dev/null; then pass "fallback kills the forked grandchild too"
 else fail "fallback kills the forked grandchild too"; kill -KILL "$gc_pid" 2>/dev/null || true; fi
 
-# --- oversize FILE is refused without being read ---
-# A 200 MB sparse file: stat-cheap to size, expensive to read. The old code ran
-# cat into a variable first, which also meant a file of NUL bytes came back
-# empty and slipped past the guard entirely.
+# --- oversize FILE is refused ---
+# A 200 MB sparse file. `oversize file exits 6` is the discriminating
+# assertion: the old code ran `cat` into a variable first, command substitution
+# stripped every NUL, `content` came back empty and the guard never fired at
+# all — rc 0 before the fix, rc 6 after. Deliberately no timing assertion here:
+# reading a sparse file of NULs is cheap (measured 0-2s for 200 MB, 1s for
+# 1 GiB), so elapsed time cannot tell the two implementations apart at any size
+# worth writing to a test disk.
 dd if=/dev/zero of="$TEST_ROOT/huge.bin" bs=1 count=0 seek=209715200 2>/dev/null
-start=$(date +%s)
 out=$(SUPERCRITIC_CONF="$TEST_ROOT/ok2.conf" "$ENGINE" "f" "$TEST_ROOT/huge.bin" 2>&1) && rc=0 || rc=$?
-elapsed=$(( $(date +%s) - start ))
 assert_status "$rc" 6 "oversize file exits 6"
 assert_contains "$out" "too large" "oversize file message"
-if [ "$elapsed" -le 5 ]; then pass "oversize file refused without reading it"; else fail "oversize file was read (${elapsed}s)"; fi
 
 # --- oversize STDIN is refused without draining the producer ---
 # `yes` never ends: if the engine reads to EOF this never returns.
