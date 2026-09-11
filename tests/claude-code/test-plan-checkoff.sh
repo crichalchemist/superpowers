@@ -321,7 +321,6 @@ cat > "$r/docs/superpowers/plans/suffix.md" <<'PLAN'
 
 ### Task 1: First
 
-**Files:**
 - Modify: `src/existing.txt:12-40`
 - Modify: `src/other.txt:7`
 
@@ -385,6 +384,21 @@ err=$( cd "$r" && "$CHECKOFF" --done 2 docs/superpowers/plans/done2.md 2>&1 >/de
 if [ "$rc" = "4" ] && [ "$before" = "$(cksum < "$p")" ]; then pass "--done with a missing path refuses, exit 4"; else fail "--done with a missing path refuses, exit 4 (rc=$rc)"; fi
 if printf '%s\n' "$err" | grep -q 'Task 2: missing: src/gamma.txt'; then pass "--done names the missing path"; else fail "--done names the missing path: $err"; fi
 
+# --- Modify-only Files block naming an absent path refuses, exit 4 (stale-plan case) ---
+r=$(new_repo)
+cat > "$r/docs/superpowers/plans/staleplan.md" <<'PLAN'
+# Stale Plan
+
+### Task 1: First
+
+**Files:**
+- Modify: `src/stale.txt`
+
+- [ ] **Step 1: alpha**
+PLAN
+err=$( cd "$r" && "$CHECKOFF" --done 1 docs/superpowers/plans/staleplan.md 2>&1 >/dev/null ); rc=$?
+if [ "$rc" = "4" ] && printf '%s\n' "$err" | grep -q 'missing: src/stale.txt'; then pass "a Modify-only path that is absent refuses, exit 4 (stale-plan case)"; else fail "a Modify-only path that is absent refuses, exit 4 (stale-plan case) (rc=$rc): $err"; fi
+
 # --- 26. --done: task listing no files refuses, exit 4 ---
 r=$(new_repo)
 cat > "$r/docs/superpowers/plans/done3.md" <<'PLAN'
@@ -395,8 +409,9 @@ cat > "$r/docs/superpowers/plans/done3.md" <<'PLAN'
 - [ ] **Step 1: alpha**
 PLAN
 p="$r/docs/superpowers/plans/done3.md"; before=$(cksum < "$p")
-( cd "$r" && "$CHECKOFF" --done 1 docs/superpowers/plans/done3.md >/dev/null 2>&1 ); rc=$?
+err=$( cd "$r" && "$CHECKOFF" --done 1 docs/superpowers/plans/done3.md 2>&1 >/dev/null ); rc=$?
 if [ "$rc" = "4" ] && [ "$before" = "$(cksum < "$p")" ]; then pass "--done on a task listing no files refuses, exit 4"; else fail "--done on a task listing no files refuses, exit 4 (rc=$rc)"; fi
+if printf '%s\n' "$err" | grep -q 'Task 1: unverified: lists no files'; then pass "--done no-files refusal says unverified on stderr"; else fail "--done no-files refusal says unverified on stderr: $err"; fi
 
 # --- 27. --done 1 2 where 2 fails: 1 flips, 2 does not, exit 4 ---
 r=$(new_repo); write_plan "$r" done4; rm "$r/src/gamma.txt"
@@ -474,6 +489,12 @@ if [ "$rc" = "0" ] && [ "$(boxes_checked "$p")" = "2" ] && [ ! -e "$a/.superpowe
 ( "$CHECKOFF" >/dev/null 2>&1 ); if [ "$?" = "2" ]; then pass "no args exits 2"; else fail "no args exits 2"; fi
 ( "$CHECKOFF" /nope/missing.md >/dev/null 2>&1 ); if [ "$?" = "2" ]; then pass "missing plan exits 2"; else fail "missing plan exits 2"; fi
 
+# --- plan outside a git repository is a usage error ---
+d=$(mktemp -d); mkdir -p "$d/docs/superpowers/plans"
+printf '# X\n### Task 1: One\n**Files:**\n- Create: `src/a.txt`\n- [ ] a\n' > "$d/docs/superpowers/plans/x.md"
+( cd "$d" && "$CHECKOFF" --done 1 docs/superpowers/plans/x.md >/dev/null 2>&1 ); rc=$?
+if [ "$rc" = "2" ]; then pass "a plan outside a git repository is a usage error"; else fail "a plan outside a git repository is a usage error (rc=$rc)"; fi
+
 # --- 12. parser agreement with task-brief on real plans ---
 # --print-range is a verbatim copy of task-brief's awk, so comparing against
 # it only proves that copy agrees with itself. Prove the main flipping pass
@@ -494,8 +515,14 @@ for f in 2026-06-09-sdd-task-scoped-review-dispatch 2026-07-06-sdd-plan-scoped-w
     brief=$(mktemp)
     if "$TASK_BRIEF" "$plan" "$n" "$brief" >/dev/null 2>&1; then
       # A task that lists no files is refused by design; parity is only
-      # meaningful for tasks the predicate can pass.
-      if ! grep -qE '^- (Create|Modify|Test): `' "$brief"; then rm -f "$brief"; continue; fi
+      # meaningful for tasks the predicate can pass. Compare the Files-block
+      # count from both sides and fail on disagreement, rather than skipping
+      # on the brief's count alone — a skip guard driven by only one side
+      # can never see that side's own parsing gap.
+      nb=$(grep -cE '^- (Create|Modify|Test): `' "$brief")
+      np=$("$CHECKOFF" --print-range "$plan" "$n" | grep -cE '^- (Create|Modify|Test): `')
+      if [ "$nb" != "$np" ]; then agree=0; echo "    Files-block mismatch: $f Task $n ($nb vs $np)"; fi
+      [ "$nb" = "0" ] && { rm -f "$brief"; continue; }
       r=$(new_repo)
       cp "$plan" "$r/docs/superpowers/plans/$f.md"
       # Materialize every path the whole plan lists so any task's predicate passes.
