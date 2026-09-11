@@ -32,7 +32,7 @@
 - Consumes: `sdd-workspace PLAN_FILE` (sibling script) → prints the plan's absolute workspace directory. Ledger is at `<workspace>/progress.md`.
 - Produces: executable `sdd-checkoff PLAN_FILE`. stdout on success: `checked off N task(s), M box(es) in <plan>` where `N` counts tasks with ≥1 box flipped **this run**. Exit 0 / 2 / 3 per Global Constraints. Task 2 wires this exact invocation into `SKILL.md`.
 
-- [ ] **Step 1: Write the test file**
+- [x] **Step 1: Write the test file**
 
 Create `tests/claude-code/test-sdd-checkoff.sh` with exactly this content:
 
@@ -292,13 +292,13 @@ fi
 
 Note test 12 requires a `--print-range PLAN N` debug mode. That is part of the contract implemented in Step 3.
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `bash tests/claude-code/test-sdd-checkoff.sh`
 
 Expected: fails immediately — `sdd-checkoff` does not exist, so every case reports `[FAIL]` and the script exits 1.
 
-- [ ] **Step 3: Write the script**
+- [x] **Step 3: Write the script**
 
 Create `skills/subagent-driven-development/scripts/sdd-checkoff` with exactly this content:
 
@@ -424,13 +424,13 @@ trap - EXIT
 echo "checked off $tasks task(s), $boxes box(es) in $plan"
 ```
 
-- [ ] **Step 4: Make it executable**
+- [x] **Step 4: Make it executable**
 
 ```bash
 chmod 755 skills/subagent-driven-development/scripts/sdd-checkoff
 ```
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [x] **Step 5: Run the test to verify it passes**
 
 Run: `bash tests/claude-code/test-sdd-checkoff.sh`
 
@@ -438,7 +438,7 @@ Expected: `All sdd-checkoff tests passed`.
 
 If the nested-fence case (test 19) reports a count outside `0` or `1`, do not "fix" the toggle — record the observed value and reconcile it with the spec's stated limits.
 
-- [ ] **Step 6: Lint**
+- [x] **Step 6: Lint**
 
 ```bash
 shellcheck skills/subagent-driven-development/scripts/sdd-checkoff tests/claude-code/test-sdd-checkoff.sh
@@ -446,7 +446,7 @@ shellcheck skills/subagent-driven-development/scripts/sdd-checkoff tests/claude-
 
 Expected: clean. Add narrowly-scoped `# shellcheck disable=` comments only with a reason on the same line.
 
-- [ ] **Step 7: Verify no real plan is corrupted**
+- [x] **Step 7: Verify no real plan is corrupted**
 
 ```bash
 git stash list >/dev/null
@@ -458,7 +458,7 @@ git diff --stat -- docs/superpowers/plans/
 
 Expected: **no diff**. No real plan has a ledger, so every invocation takes the missing-ledger path and exits 0 without writing. A non-empty diff here means the guard failed — stop and fix before committing.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add skills/subagent-driven-development/scripts/sdd-checkoff tests/claude-code/test-sdd-checkoff.sh
@@ -476,7 +476,7 @@ git commit -m "feat(sdd): sdd-checkoff reconciles plan checkboxes from the ledge
 - Consumes: `scripts/sdd-checkoff PLAN_FILE` from Task 1 — exit 0 on a fresh plan, so the setup call is a silent no-op the first time.
 - Produces: no code interface. Behavioral change only.
 
-- [ ] **Step 1: Add the setup call**
+- [x] **Step 1: Add the setup call**
 
 In the Setup section's bullet list, immediately after the bullet describing the ledger identity check (the one ending "leave it in place and start your own, fresh."), add this bullet:
 
@@ -487,7 +487,7 @@ In the Setup section's bullet list, immediately after the bullet describing the 
   the tracked plan file stops lying about what is done.
 ```
 
-- [ ] **Step 2: Add the teardown call**
+- [x] **Step 2: Add the teardown call**
 
 Find the prose describing the final-review cleanup step that deletes the workspace. Immediately before the deletion instruction, add:
 
@@ -497,7 +497,7 @@ time — deletion destroys the ledger, so this is the last moment the plan's
 checkboxes can be reconciled from it.
 ```
 
-- [ ] **Step 3: Update the process graph**
+- [x] **Step 3: Update the process graph**
 
 In the `digraph` block, replace the node declaration line:
 
@@ -513,7 +513,7 @@ with:
 
 Then update both edges that reference the old label (the incoming edge from the final-findings node and the outgoing edge to `"Use superpowers:finishing-a-development-branch"`) to use the new label verbatim. Graphviz creates a new node for any label mismatch, so all three occurrences must match exactly.
 
-- [ ] **Step 4: Verify the graph still parses**
+- [x] **Step 4: Verify the graph still parses**
 
 ```bash
 node skills/writing-skills/render-graphs.js skills/subagent-driven-development
@@ -535,7 +535,7 @@ grep -c "delete this plan's workspace\"" skills/subagent-driven-development/SKIL
 
 Expected: `0` occurrences of the *old* label as a standalone node string.
 
-- [ ] **Step 5: Clean up the render artifact**
+- [x] **Step 5: Clean up the render artifact**
 
 ```bash
 rm -rf skills/subagent-driven-development/diagrams
@@ -543,7 +543,7 @@ rm -rf skills/subagent-driven-development/diagrams
 
 The renderer writes into the skill directory; that output is not committed.
 
-- [ ] **Step 6: Run the full SDD test suite**
+- [x] **Step 6: Run the full SDD test suite**
 
 ```bash
 bash tests/claude-code/test-sdd-workspace.sh
@@ -553,7 +553,7 @@ bash tests/claude-code/test-sdd-checkoff.sh
 
 Expected: all pass. `test-subagent-driven-development.sh` asserts against SKILL.md prose, so a failure there means Step 1–3 wording collided with an existing assertion — read the assertion and adjust the added text, not the assertion.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add skills/subagent-driven-development/SKILL.md
