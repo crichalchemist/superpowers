@@ -343,9 +343,7 @@ correctly. Only the script paths above are absolute.
    `SUPERCRITIC_ENABLED=1`, `SUPERCRITIC_MODEL`, and `SUPERCRITIC_VERIFIED=0`. Use the
    **absolute path** the detector printed for that CLI — its second TAB-separated field —
    not the bare name. A bare name resolves through `PATH` every time the engine runs, so a
-   later `PATH` change would run a different binary than the one approved here. (The engine
-   resolves a bare name and prints `supercritic: resolved <name> -> <path>` rather than
-   trusting it silently, but the conf should pin it.)
+   later `PATH` change would run a different binary than the one approved here.
 4. **Smoke-test:** run `echo "smoke test: reply OK" | SUPERCRITIC_SMOKE=1 "$ENGINE" "smoke" -`.
    (`SUPERCRITIC_SMOKE=1` bypasses the engine's verified gate — the conf still
    says `SUPERCRITIC_VERIFIED=0` at this point, by design.) Confirm it returns

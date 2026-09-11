@@ -11,7 +11,8 @@
 #   <producer> | scripts/supercritic.sh "<focus>" -   # review piped text (e.g. a diff)
 #
 # Config: sources $SUPERCRITIC_CONF (default: ./.superpowers/supercritic.conf).
-# Must set SUPERCRITIC_CMD as a bash array, e.g. SUPERCRITIC_CMD=(agy --print).
+# Must set SUPERCRITIC_CMD as a bash array whose first element is the absolute
+# path to the CLI, e.g. SUPERCRITIC_CMD=(/abs/path/to/agy --print).
 # May set SUPERCRITIC_ENABLED (1/0), SUPERCRITIC_VERIFIED (1/0),
 # SUPERCRITIC_TIMEOUT (seconds, default 120), SUPERCRITIC_MODEL (informational).
 # SUPERCRITIC_SMOKE=1 (env, never conf) bypasses only the VERIFIED gate so
@@ -21,9 +22,12 @@
 #   0  review printed
 #   2  usage error, or the named source file does not exist
 #   3  feature off or mis-set — no conf, disabled, unverified, conf tracked by
-#      git, git tracked-conf check timed out, empty or unresolvable
-#      SUPERCRITIC_CMD. A caller should treat this as "skip", not "broken".
-#   4  the supercritic CLI timed out
+#      git, the git tracked-conf check unable to prove otherwise, a
+#      SUPERCRITIC_CMD that is empty or does not resolve to an executable file,
+#      a SUPERCRITIC_TIMEOUT that is not a positive integer. A caller should
+#      treat this as "skip", not "broken".
+#   4  the supercritic CLI timed out (a CLI that exits 124, 137 or 143 of its
+#      own accord is indistinguishable from this and reports as 4)
 #   5  the CLI exited non-zero, or exited 0 with no output
 #   6  content too large
 #

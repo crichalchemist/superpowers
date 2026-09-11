@@ -11,9 +11,11 @@ access, no permission-skipping flags.
 
 Exit codes let a caller tell "turned off" from "broken": `0` review printed,
 `2` usage or missing file, `3` feature off or mis-set (no conf, disabled,
-unverified, bad `SUPERCRITIC_CMD`), `4` CLI timed out, `5` CLI failed or
-returned nothing, `6` content too large. Treat `3` as skip; treat `4`, `5` and
-`6` as real failures worth surfacing.
+unverified, bad `SUPERCRITIC_CMD`, bad `SUPERCRITIC_TIMEOUT`), `4` CLI timed
+out, `5` CLI failed or returned nothing, `6` content too large. Treat `3` as
+skip; treat `4`, `5` and `6` as real failures worth surfacing. A CLI that exits
+124, 137 or 143 of its own accord is indistinguishable from a timeout and
+reports as `4`.
 
 Put the **absolute path** `detect-supercritic.sh` printed for the CLI — its
 second TAB-separated field — in `SUPERCRITIC_CMD`, not the bare name. A bare
@@ -23,9 +25,9 @@ examples; use the one the detector reported on this machine.
 
 | CLI         | `SUPERCRITIC_CMD` starting point                      | Notes |
 |-------------|-------------------------------------------------------|-------|
-| agy         | `SUPERCRITIC_CMD=(/opt/homebrew/bin/agy --print)`     | Optional `--model X`. Original agy-review preset. |
+| agy         | `SUPERCRITIC_CMD=(/abs/path/to/agy --print)`          | Optional `--model X`. Original agy-review preset. |
 | codex       | (verify `--help`)                                     | Confirm non-interactive/exec flag. |
 | cursor-agent| (verify `--help`)                                     | Confirm print/headless flag. |
-| llm         | `SUPERCRITIC_CMD=(/opt/homebrew/bin/llm)`             | Prompt passed as the trailing arg. |
-| ollama      | `SUPERCRITIC_CMD=(/usr/local/bin/ollama run <model>)` | Local model; pick a capable one. |
+| llm         | `SUPERCRITIC_CMD=(/abs/path/to/llm)`                  | Prompt passed as the trailing arg. |
+| ollama      | `SUPERCRITIC_CMD=(/abs/path/to/ollama run <model>)`   | Local model; pick a capable one. |
 | gemini      | —                                                     | EOLed upstream (#1846); avoid. |
