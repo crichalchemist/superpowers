@@ -87,7 +87,7 @@ digraph process {
     "More tasks remain?" [shape=diamond];
     "Dispatch final code reviewer (../requesting-code-review/code-reviewer.md)" [shape=box];
     "Final findings? ONE fix dispatch, one scoped re-review, adjudicate residuals" [shape=box];
-    "Final review clean: delete this plan's workspace" [shape=box];
+    "Final review clean: reconcile plan checkboxes, delete this plan's workspace" [shape=box];
     "Use superpowers:finishing-a-development-branch" [shape=box style=filled fillcolor=lightgreen];
 
     "Setup: worktree, ledger check, read plan, pre-flight review" -> "Dispatch implementer subagent (./implementer-prompt.md)";
@@ -116,8 +116,8 @@ digraph process {
     "More tasks remain?" -> "Dispatch implementer subagent (./implementer-prompt.md)" [label="yes"];
     "More tasks remain?" -> "Dispatch final code reviewer (../requesting-code-review/code-reviewer.md)" [label="no"];
     "Dispatch final code reviewer (../requesting-code-review/code-reviewer.md)" -> "Final findings? ONE fix dispatch, one scoped re-review, adjudicate residuals";
-    "Final findings? ONE fix dispatch, one scoped re-review, adjudicate residuals" -> "Final review clean: delete this plan's workspace";
-    "Final review clean: delete this plan's workspace" -> "Use superpowers:finishing-a-development-branch";
+    "Final findings? ONE fix dispatch, one scoped re-review, adjudicate residuals" -> "Final review clean: reconcile plan checkboxes, delete this plan's workspace";
+    "Final review clean: reconcile plan checkboxes, delete this plan's workspace" -> "Use superpowers:finishing-a-development-branch";
 }
 ```
 
@@ -145,6 +145,10 @@ a ledger file, not only in todos.
   round. A ledger whose first line names a different plan file — or a stray
   ledger at the old flat path `.superpowers/sdd/progress.md` — is another
   plan's progress: leave it in place and start your own, fresh.
+- Reconcile the plan's checkboxes from the ledger before dispatching: run this
+  skill's `scripts/sdd-checkoff PLAN_FILE`. On a fresh plan it exits 0 and does
+  nothing; after an aborted run it checks off the tasks the ledger recorded, so
+  the tracked plan file stops lying about what is done.
 - Create the ledger with its identity as the first line:
   `# SDD ledger — plan: <plan file path>`.
 - The ledger is your recovery map: the commits it names exist in git even
@@ -478,6 +482,15 @@ ruling, the list holds it. That list is the only place the decisions you
 took on your human partner's behalf reach them — they read it and rework
 whatever you got wrong. A ruling that dies with the workspace was a decision
 made in secret.
+
+Before deleting the workspace, run `scripts/sdd-checkoff PLAN_FILE` one last
+time — deletion destroys the ledger, so this is the last moment the plan's
+checkboxes can be reconciled from it. Inspect the resulting `git diff` of the
+plan before committing: the script cannot detect a plan whose quoted
+fixtures put fences inside fences, and a box flipped inside quoted content
+is a corruption to revert by hand. Commit the reconciled plan — the
+check-off dirties a tracked file, and finishing-a-development-branch refuses
+to remove a dirty worktree.
 
 When the final whole-branch review is clean and its fixes are merged,
 delete this plan's workspace (`rm -rf <workspace>`) — the git history is
