@@ -359,7 +359,10 @@ verify_task() {
 # that verify, report per task on stderr, summary on stdout. Sets rc to 4 if
 # any task was refused.
 flip_tasks() {
-  local n flip="" t k tasks=0 boxes=0 tmp countfile counts
+  # tmp and countfile are deliberately NOT local: the EXIT trap below expands
+  # them after this function has returned, and a local would be empty by then,
+  # leaving the count file beside the plan (the leak test catches exactly that).
+  local n flip="" t k tasks=0 boxes=0
   rc=0
   for n in $attested; do
     verify_task "$n"
@@ -704,14 +707,15 @@ Directly after the `--done` mode block and before the `# ---- ledger mode` banne
 
 if [ "$mode" = verify ]; then
   rc=0
-  for n in $(ticked_tasks "$plan"); do
+  # Process substitution, not a pipe: the loop must run in this shell so rc sticks.
+  while IFS= read -r n; do
     verify_task "$n"
     case "$VERDICT" in
       ok) ;;
       nofiles) say "verify: Task $n ticked but lists no files"; rc=4 ;;
       missing*) say "verify: Task $n ticked but missing:${VERDICT#missing}"; rc=4 ;;
     esac
-  done
+  done < <(ticked_tasks "$plan")
   exit "$rc"
 fi
 ```
