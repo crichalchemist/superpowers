@@ -79,14 +79,19 @@ conf=${SUPERCRITIC_CONF:-.superpowers/supercritic.conf}
 # clone and run attacker bash the first time a consume hook fires. Legit confs
 # are always untracked (setup step 5 gitignores .superpowers/), so refuse.
 # A hung git (network filesystem, an index lock held elsewhere) must not hang
-# the engine, so the check is itself timeout-guarded. rc 1 means untracked and
-# 128 means "not a git repo" — both are normal, fall through.
+# the engine, so the check is itself timeout-guarded. This is an ALLOWLIST, not
+# a denylist: only rc 1 (untracked) and 128 (not a git repo) prove the conf is
+# safe to source. Every other result — a timeout, a broken git, `timeout` itself
+# failing — leaves the question open, and an open question about sourcing
+# attacker bash from a hostile clone means refuse.
 if command -v git >/dev/null 2>&1; then
   git_rc=0
   run_with_timeout 10 git ls-files --error-unmatch -- "$conf" >/dev/null 2>&1 || git_rc=$?
   case "$git_rc" in
     0) die "$conf is tracked by git — refusing to source it (a committed conf can execute arbitrary code; untrack it and gitignore .superpowers/)" 3 ;;
+    1 | 128) ;;
     124 | 137 | 143) die "git tracked-conf check timed out after 10s — refusing to source $conf (cannot prove it is untracked; untrack it and gitignore .superpowers/)" 3 ;;
+    *) die "git tracked-conf check failed (exit $git_rc) — refusing to source $conf (cannot prove it is untracked; untrack it and gitignore .superpowers/)" 3 ;;
   esac
 fi
 # shellcheck source=/dev/null

@@ -339,5 +339,22 @@ assert_status "$rc" 3 "hung git check exits 3"
 assert_contains "$out" "timed out" "hung git check message"
 if [ "$elapsed" -le 15 ]; then pass "hung git check gives up in ~10s"; else fail "hung git check took ${elapsed}s"; fi
 
+# --- a git that fails in any unrecognised way must fail CLOSED ---
+# Only rc 1 (untracked) and 128 (not a repo) prove the conf is safe to source.
+# Anything else — a broken git, a failing `timeout` itself — leaves the question
+# open, and an open question about sourcing attacker bash means refuse.
+BADGIT_BIN="$TEST_ROOT/badgit-bin"
+hermetic_bin "$BADGIT_BIN"
+cat >"$BADGIT_BIN/git" <<'STUB'
+#!/usr/bin/env bash
+exit 125
+STUB
+chmod +x "$BADGIT_BIN/git"
+out=$(PATH="$BADGIT_BIN" SUPERCRITIC_CONF="$TEST_ROOT/ok2.conf" \
+  "$BASH" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 3 "unrecognised git result exits 3"
+assert_contains "$out" "git tracked-conf check failed (exit 125)" "unrecognised git result message"
+assert_not_contains "$out" "REVIEW_MARKER" "unrecognised git result never sources the conf"
+
 if [ "$FAILURES" -gt 0 ]; then echo "$FAILURES supercritic engine test(s) failed"; exit 1; fi
 echo "All supercritic engine tests passed"
