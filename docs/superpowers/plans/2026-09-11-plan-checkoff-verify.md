@@ -41,14 +41,14 @@ Pure rename, no behaviour change. The existing 23 assertions must pass unchanged
 **Interfaces:**
 - Produces: script path `skills/subagent-driven-development/scripts/plan-checkoff`; stderr prefix `plan-checkoff:`; temp-file prefixes `.plan-checkoff.` and `.plan-checkoff-count.` beside the plan; test file `tests/claude-code/test-plan-checkoff.sh` with `CHECKOFF="$SCRIPT_DIR/plan-checkoff"`.
 
-- [ ] **Step 1: Rename both files with git so history follows**
+- [x] **Step 1: Rename both files with git so history follows**
 
 ```bash
 git mv skills/subagent-driven-development/scripts/sdd-checkoff skills/subagent-driven-development/scripts/plan-checkoff
 git mv tests/claude-code/test-sdd-checkoff.sh tests/claude-code/test-plan-checkoff.sh
 ```
 
-- [ ] **Step 2: Update every textual reference**
+- [x] **Step 2: Update every textual reference**
 
 In `skills/subagent-driven-development/scripts/plan-checkoff`: replace every `sdd-checkoff` with `plan-checkoff` (the header usage lines, the `die()` prefix, the two `usage:` strings, and the two `mktemp` templates `.sdd-checkoff.XXXXXX` → `.plan-checkoff.XXXXXX` and `.sdd-checkoff-count.XXXXXX` → `.plan-checkoff-count.XXXXXX`).
 
@@ -60,12 +60,12 @@ In `skills/subagent-driven-development/SKILL.md`: line 149 and line 486, `script
 
 In `.claude/CLAUDE.md`: the one mention `scripts/sdd-checkoff PLAN_FILE` → `scripts/plan-checkoff PLAN_FILE`.
 
-- [ ] **Step 3: Prove nothing else references the old name**
+- [x] **Step 3: Prove nothing else references the old name**
 
 Run: `git grep -n 'sdd-checkoff' -- . ':!docs/superpowers/ledgers' ':!docs/superpowers/plans' ':!docs/superpowers/specs'`
 Expected: no output. (Plans, specs, and archived ledgers keep the historical name.)
 
-- [ ] **Step 4: Run the renamed test file and the linter**
+- [x] **Step 4: Run the renamed test file and the linter**
 
 Run: `bash tests/claude-code/test-plan-checkoff.sh`
 Expected: 23 `[PASS]`, ends with `All plan-checkoff tests passed`.
@@ -73,7 +73,7 @@ Expected: 23 `[PASS]`, ends with `All plan-checkoff tests passed`.
 Run: `shellcheck --severity=warning skills/subagent-driven-development/scripts/plan-checkoff tests/claude-code/test-plan-checkoff.sh`
 Expected: no output.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A skills/subagent-driven-development/scripts tests/claude-code skills/subagent-driven-development/SKILL.md .claude/CLAUDE.md
@@ -94,7 +94,7 @@ After this task the ledger mode verifies every attested task before flipping it.
 - Produces: shell functions inside the script — `task_headings PLAN`, `task_files PLAN N`, `ticked_tasks PLAN`, `verify_task N` (sets `VERDICT` to `ok`, `nofiles`, or `missing <path> [<path>…]`), `flip_tasks` (reads `$attested`, space-separated task numbers; writes per-task stderr lines and the stdout summary; sets `rc`). Tasks 3 and 4 add mode branches that call these and change nothing inside them.
 - Produces: stderr lines `plan-checkoff: Task N: flipped K box(es)`, `plan-checkoff: Task N: nothing to flip`, `plan-checkoff: Task N: unverified: lists no files — not flipped`, `plan-checkoff: Task N: missing: <paths> — not flipped`; stdout summary `checked off T task(s), B box(es) in PLAN` unchanged.
 
-- [ ] **Step 1: Migrate the shared fixture so its tasks list files that exist**
+- [x] **Step 1: Migrate the shared fixture so its tasks list files that exist**
 
 In `tests/claude-code/test-plan-checkoff.sh`, replace the `write_plan` function with:
 
@@ -132,7 +132,7 @@ Add one helper directly below `write_ledger`:
 touch_in() { mkdir -p "$(dirname "$1/$2")"; : > "$1/$2"; }
 ```
 
-- [ ] **Step 2: Migrate the four inline fixtures**
+- [x] **Step 2: Migrate the four inline fixtures**
 
 Each inline fixture (`fence.md`, `fh.md`, `ten.md`, `nested.md`) gets a `**Files:**` block with one existing path directly under its Task heading(s), and a `touch_in` call before the heredoc. Exact edits:
 
@@ -150,7 +150,7 @@ and before the `cat >` line add `touch_in "$r" src/fence.txt`.
 
 `nested.md` — Task 1 gets `- Create: `src/nested.txt``; `touch_in` it. The pinned observation (`n = 2`) does not change: the inner-fence box still flips under the documented toggle limit.
 
-- [ ] **Step 3: Make the parity test materialize each real plan's listed paths, and skip tasks that list none**
+- [x] **Step 3: Make the parity test materialize each real plan's listed paths, and skip tasks that list none**
 
 Replace the body of the parity loop's inner `if "$TASK_BRIEF" …; then … fi` block with:
 
@@ -187,7 +187,7 @@ and increment `parity_runs=$((parity_runs + 1))` right after the `write_ledger` 
 if [ "$agree" = "1" ] && [ "$parity_runs" -gt 0 ]; then pass "parser agreement with task-brief on real plans ($parity_runs runs)"; else fail "parser agreement with task-brief on real plans (agree=$agree runs=$parity_runs)"; fi
 ```
 
-- [ ] **Step 4: Write the new failing tests for the predicate**
+- [x] **Step 4: Write the new failing tests for the predicate**
 
 Append these blocks before the `# --- 11. usage / missing plan ---` section:
 
@@ -275,12 +275,12 @@ touch_in "$r" src/from-a-fence.txt
 if [ "$rc" = "4" ]; then pass "Files lines inside a fence do not count as evidence"; else fail "Files lines inside a fence do not count as evidence (rc=$rc)"; fi
 ```
 
-- [ ] **Step 5: Run the tests to verify the new ones fail**
+- [x] **Step 5: Run the tests to verify the new ones fail**
 
 Run: `bash tests/claude-code/test-plan-checkoff.sh`
 Expected: the pre-existing assertions pass; `missing Test path exits 4`, `task with a missing path is not flipped`, `missing path is named on stderr`, `task listing no files is refused…`, `refusal says unverified`, and `Files lines inside a fence…` fail (the old script flips everything and exits 0). `line-range suffix…`, `verified task still flips alongside a refused one`, and `rerun after the path exists flips the task, exit 0` pass vacuously today; they are regression guards.
 
-- [ ] **Step 6: Replace the script with the predicate-aware version**
+- [x] **Step 6: Replace the script with the predicate-aware version**
 
 Write `skills/subagent-driven-development/scripts/plan-checkoff` with exactly this content:
 
@@ -491,7 +491,7 @@ flip_tasks
 exit "$rc"
 ```
 
-- [ ] **Step 7: Run the tests to verify they pass**
+- [x] **Step 7: Run the tests to verify they pass**
 
 Run: `bash tests/claude-code/test-plan-checkoff.sh`
 Expected: all assertions pass (23 pre-existing + 10 new = 33), ends with `All plan-checkoff tests passed`. If the parity assertion reports `runs=0`, the three real plans' tasks 1–3 list no files in the template form; inspect them with `--print-range` and adjust the `grep -qE` guard only if the grammar in this plan's Global Constraints is being violated by the test, not by the plans.
@@ -499,7 +499,7 @@ Expected: all assertions pass (23 pre-existing + 10 new = 33), ends with `All pl
 Run: `shellcheck --severity=warning skills/subagent-driven-development/scripts/plan-checkoff tests/claude-code/test-plan-checkoff.sh`
 Expected: no output.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add skills/subagent-driven-development/scripts/plan-checkoff tests/claude-code/test-plan-checkoff.sh
@@ -518,7 +518,7 @@ git commit -m "feat(sdd): verify every check-off against the task's Files block"
 - Consumes: `flip_tasks`, `task_headings`, `verify_task`, `$attested`, `$root` from Task 2.
 - Produces: invocation `plan-checkoff --done N [N …] PLAN_FILE`; exit 2 when a named task has no heading; otherwise the same per-task lines and exit contract as ledger mode.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append before the `# --- 11. usage / missing plan ---` section:
 
@@ -576,12 +576,12 @@ r=$(new_repo); write_plan "$r" done7
 if [ "$rc" = "2" ]; then pass "--done rejects a non-numeric task"; else fail "--done rejects a non-numeric task (rc=$rc)"; fi
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `bash tests/claude-code/test-plan-checkoff.sh`
 Expected: the seven new `--done` assertions fail (today `--done` hits the `-*) usage` branch and exits 2, so tests 28 and 30 pass vacuously; the rest fail). Everything else passes.
 
-- [ ] **Step 3: Add the mode**
+- [x] **Step 3: Add the mode**
 
 In the header comment, add a usage line after the `PLAN_FILE` one:
 
@@ -625,7 +625,7 @@ fi
 
 (`$done_list` is intentionally unquoted in the `printf`: it is a space-separated list of validated integers, and word splitting is the point. shellcheck accepts this at warning severity because the values were validated as digits above; if it flags SC2086 anyway, rewrite as `printf '%s\n' "${done_list# }" | tr ' ' '\n' | sort -un | tr '\n' ' '`.)
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `bash tests/claude-code/test-plan-checkoff.sh`
 Expected: 40 `[PASS]`, ends with `All plan-checkoff tests passed`.
@@ -633,7 +633,7 @@ Expected: 40 `[PASS]`, ends with `All plan-checkoff tests passed`.
 Run: `shellcheck --severity=warning skills/subagent-driven-development/scripts/plan-checkoff tests/claude-code/test-plan-checkoff.sh`
 Expected: no output.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/subagent-driven-development/scripts/plan-checkoff tests/claude-code/test-plan-checkoff.sh
@@ -652,7 +652,7 @@ git commit -m "feat(sdd): plan-checkoff --done N for executors without a ledger"
 - Consumes: `ticked_tasks`, `verify_task`, `$root` from Task 2.
 - Produces: invocation `plan-checkoff --verify PLAN_FILE`; writes nothing; exit 0 and silent when clean; exit 4 with one stderr line per offending task: `plan-checkoff: verify: Task N ticked but missing: <paths>` or `plan-checkoff: verify: Task N ticked but lists no files`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append before the `# --- 11. usage / missing plan ---` section:
 
@@ -690,12 +690,12 @@ r=$(new_repo); write_plan "$r" ver4; rm "$r/src/gamma.txt"
 if [ "$rc" = "0" ]; then pass "--verify ignores tasks with no ticked box"; else fail "--verify ignores tasks with no ticked box (rc=$rc)"; fi
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `bash tests/claude-code/test-plan-checkoff.sh`
 Expected: tests 31–34 fail (`--verify` is a usage error today, exit 2). Everything else passes.
 
-- [ ] **Step 3: Add the mode**
+- [x] **Step 3: Add the mode**
 
 Header: add usage line `#   plan-checkoff --verify PLAN_FILE           audit: every ticked task must verify; writes nothing` and extend the `4` exit-code line to `4 one or more attested tasks not flipped, or --verify found a ticked task that fails`.
 
@@ -723,7 +723,7 @@ if [ "$mode" = verify ]; then
 fi
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `bash tests/claude-code/test-plan-checkoff.sh`
 Expected: 45 `[PASS]`, ends with `All plan-checkoff tests passed`.
@@ -734,7 +734,7 @@ Expected: no output.
 Run: `bash scripts/lint-shell.sh skills/subagent-driven-development/scripts/plan-checkoff tests/claude-code/test-plan-checkoff.sh`
 Expected: `Linting 2 shell files`, exit 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/subagent-driven-development/scripts/plan-checkoff tests/claude-code/test-plan-checkoff.sh
@@ -754,12 +754,12 @@ Three sentences in two skill files. Nothing else in either file changes.
 **Interfaces:**
 - Consumes: `plan-checkoff --done N PLAN_FILE` and `plan-checkoff --verify PLAN_FILE` from Tasks 3 and 4; exit 4 semantics from the Global Constraints.
 
-- [ ] **Step 1: Confirm the anchors are where this plan says**
+- [x] **Step 1: Confirm the anchors are where this plan says**
 
 Run: `grep -n 'scripts/plan-checkoff PLAN_FILE. one last' skills/subagent-driven-development/SKILL.md; grep -n '^4. Mark as completed$\|^### Step 3: Complete Development$' skills/executing-plans/SKILL.md`
 Expected: three line numbers (one in SDD around 486, two in executing-plans at 31 and 33). If a line is missing, stop and report; do not guess a new anchor.
 
-- [ ] **Step 2: Extend the SDD teardown paragraph**
+- [x] **Step 2: Extend the SDD teardown paragraph**
 
 In `skills/subagent-driven-development/SKILL.md`, the paragraph beginning `Before deleting the workspace, run \`scripts/plan-checkoff PLAN_FILE\` one last` currently ends with `…finishing-a-development-branch refuses to remove a dirty worktree.` Append one sentence to that paragraph, after that final sentence:
 
@@ -769,7 +769,7 @@ not exist, or lists no files at all — either the task is not done or the plan
 is wrong about it; resolve that before deleting the workspace, then rerun.
 ```
 
-- [ ] **Step 3: Wire executing-plans step 2.4 and step 3**
+- [x] **Step 3: Wire executing-plans step 2.4 and step 3**
 
 In `skills/executing-plans/SKILL.md`, replace line 31 `4. Mark as completed` with:
 
@@ -789,7 +789,7 @@ In `### Step 3: Complete Development`, insert as the first bullet under `After a
   them before going on.
 ```
 
-- [ ] **Step 4: Prove the edits are the only changes**
+- [x] **Step 4: Prove the edits are the only changes**
 
 Run: `git diff --stat -- skills/`
 Expected: exactly two files, `skills/executing-plans/SKILL.md` and `skills/subagent-driven-development/SKILL.md`, with roughly `+9 -1` and `+3 -0`.
@@ -797,7 +797,7 @@ Expected: exactly two files, `skills/executing-plans/SKILL.md` and `skills/subag
 Run: `git diff -- skills/ | grep -c -i -E 'red flag|rationaliz|human partner'`
 Expected: `0`.
 
-- [ ] **Step 5: Run the fast skill-test files that read these skills, and the full check-off suite**
+- [x] **Step 5: Run the fast skill-test files that read these skills, and the full check-off suite**
 
 Run: `bash tests/claude-code/test-plan-checkoff.sh`
 Expected: 45 `[PASS]`.
@@ -805,7 +805,7 @@ Expected: 45 `[PASS]`.
 Run: `bash tests/supercritic/run-tests.sh`
 Expected: `=== All supercritic tests passed ===` (unrelated, proves the tree is still green).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add skills/subagent-driven-development/SKILL.md skills/executing-plans/SKILL.md
