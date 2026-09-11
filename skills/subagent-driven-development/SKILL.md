@@ -491,6 +491,9 @@ fixtures put fences inside fences, and a box flipped inside quoted content
 is a corruption to revert by hand. Commit the reconciled plan — the
 check-off dirties a tracked file, and finishing-a-development-branch refuses
 to remove a dirty worktree.
+An exit of 4 means a ledgered task's `Files:` block names a path that does
+not exist, or lists no files at all — either the task is not done or the plan
+is wrong about it; resolve that before deleting the workspace, then rerun.
 
 When the final whole-branch review is clean and its fixes are merged,
 delete this plan's workspace (`rm -rf <workspace>`) — the git history is
