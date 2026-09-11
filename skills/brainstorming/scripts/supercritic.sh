@@ -17,6 +17,16 @@
 # SUPERCRITIC_SMOKE=1 (env, never conf) bypasses only the VERIFIED gate so
 # setup's smoke test can run through this engine before VERIFIED is set to 1.
 #
+# Exit codes:
+#   0  review printed
+#   2  usage error, or the named source file does not exist
+#   3  feature off or mis-set — no conf, disabled, unverified, conf tracked by
+#      git, git tracked-conf check timed out, empty or unresolvable
+#      SUPERCRITIC_CMD. A caller should treat this as "skip", not "broken".
+#   4  the supercritic CLI timed out
+#   5  the CLI exited non-zero, or exited 0 with no output
+#   6  content too large
+#
 # SAFETY INVARIANT (do not change): reviews go through inline content only — the
 # CLI sees only the text we pass, so the review is read-only by construction. No
 # repo-access or permission-skipping flags belong in SUPERCRITIC_CMD. `</dev/null`
