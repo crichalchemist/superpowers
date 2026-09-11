@@ -30,7 +30,9 @@
 #   4  the supercritic CLI timed out (a CLI that exits 124, 137 or 143 of its
 #      own accord is indistinguishable from this and reports as 4)
 #   5  the CLI exited non-zero, or exited 0 with no output
-#   6  content too large
+#   6  content refused: too large, or containing NUL bytes, which a bash
+#      variable cannot hold — a binary diff would be reviewed as an empty
+#      document
 #
 # SAFETY INVARIANT (do not change): reviews go through inline content only — the
 # CLI sees only the text we pass, so the review is read-only by construction. No
@@ -169,19 +171,31 @@ if [ "$src" = "-" ]; then
   # `|| :` so a failed cleanup cannot overwrite the exit code the contract promises.
   trap 'rm -f "$tmp" || :' EXIT
   head -c "$(( MAX_BYTES + 1 ))" >"$tmp"
-  stdin_bytes=$(( $(wc -c < "$tmp") ))
-  if [ "$stdin_bytes" -gt "$MAX_BYTES" ]; then
+  source_path=$tmp
+  source_bytes=$(( $(wc -c < "$tmp") ))
+  if [ "$source_bytes" -gt "$MAX_BYTES" ]; then
     die "content too large (more than ${MAX_BYTES} bytes) — narrow the diff or split the review" 6
   fi
-  content=$(cat "$tmp")
 else
   [ -f "$src" ] || { echo "supercritic: no such file: $src" >&2; exit 2; }
-  src_bytes=$(( $(wc -c < "$src") ))
-  if [ "$src_bytes" -gt "$MAX_BYTES" ]; then
-    die "content too large (${src_bytes} bytes > ${MAX_BYTES}) — narrow the diff or split the review" 6
+  source_path=$src
+  source_bytes=$(( $(wc -c < "$src") ))
+  if [ "$source_bytes" -gt "$MAX_BYTES" ]; then
+    die "content too large (${source_bytes} bytes > ${MAX_BYTES}) — narrow the diff or split the review" 6
   fi
-  content=$(cat "$src")
 fi
+# Size is not the only way content can be unreviewable. A bash variable cannot
+# hold a NUL, so the `cat` below would hand the CLI an emptied document and a
+# review of nothing would exit 0 — the same false "nothing to address" signal
+# the empty-CLI-output rule refuses further down. Compare the bytes on disk with
+# the bytes that survive NUL removal: any difference is binary content. Checked
+# on the file, before anything reaches command substitution, so the CLI never
+# runs and bash never prints its own "ignored null byte" warning.
+text_bytes=$(( $(tr -d '\000' < "$source_path" | wc -c) ))
+if [ "$text_bytes" -ne "$source_bytes" ]; then
+  die "content contains NUL bytes ($(( source_bytes - text_bytes )) of ${source_bytes}) and cannot be reviewed as text — pass a text diff, not a binary one" 6
+fi
+content=$(cat "$source_path")
 
 prompt=$(cat <<EOF
 You are doing a READ-ONLY review. Do not ask follow-up questions; produce the review directly.

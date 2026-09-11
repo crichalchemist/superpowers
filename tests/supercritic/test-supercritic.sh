@@ -35,7 +35,7 @@ assert_not_contains() {
 hermetic_bin() {
   local dir=$1 util util_path
   mkdir -p "$dir"
-  for util in bash cat head mktemp rm sleep wc; do
+  for util in bash cat head mktemp rm sleep tr wc; do
     util_path=$(command -v "$util") || { echo "  [FAIL] hermetic_bin: no $util on PATH"; exit 1; }
     ln -sf "$util_path" "$dir/$util"
   done
@@ -225,6 +225,29 @@ out=$(head -c 200000 /dev/zero | SUPERCRITIC_CONF="$TEST_ROOT/ok2.conf" "$ENGINE
 assert_status "$rc" 6 "oversize NUL content exits 6"
 assert_contains "$out" "too large" "oversize NUL content message"
 assert_not_contains "$out" "REVIEW_MARKER" "NUL stream is refused, never reviewed as empty"
+
+# --- undersize content containing NUL bytes is refused, not silently emptied ---
+# A bash variable cannot hold a NUL, so command substitution empties the document
+# and the CLI reviews nothing while exiting 0 — the same false "nothing to
+# address" signal the empty-CLI-output rule already refuses. Detected on the file
+# before the content is read into a variable, so the size gate is not the only
+# thing standing between a binary blob and a review of it.
+head -c 10000 /dev/zero > "$TEST_ROOT/nul.bin"
+out=$(SUPERCRITIC_CONF="$TEST_ROOT/ok2.conf" "$ENGINE" "f" "$TEST_ROOT/nul.bin" 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 6 "NUL file exits 6"
+assert_contains "$out" "NUL bytes" "NUL file message names NUL bytes"
+assert_not_contains "$out" "REVIEW_MARKER" "NUL file is refused before the CLI runs"
+
+out=$(head -c 10000 /dev/zero | SUPERCRITIC_CONF="$TEST_ROOT/ok2.conf" "$ENGINE" "f" - 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 6 "NUL stdin exits 6"
+assert_contains "$out" "NUL bytes" "NUL stdin message names NUL bytes"
+assert_not_contains "$out" "REVIEW_MARKER" "NUL stdin is refused before the CLI runs"
+
+# ...and a NUL-free text file is unaffected — the only file-source happy path.
+printf 'plain-file-content\n' > "$TEST_ROOT/plain.txt"
+out=$(SUPERCRITIC_CONF="$TEST_ROOT/ok2.conf" "$ENGINE" "f" "$TEST_ROOT/plain.txt" 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 0 "NUL-free text file still reviewed"
+assert_contains "$out" "plain-file-content" "text file content reaches the CLI prompt"
 
 # --- CLI exits 0 with no output: fail loud, not silent success ---
 cat >"$TEST_ROOT/silent.conf" <<CONF
