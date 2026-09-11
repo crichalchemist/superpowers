@@ -382,5 +382,52 @@ out=$(SUPERCRITIC_CONF="$TEST_ROOT/badtimeout.conf" "$ENGINE" "f" - <<<"x" 2>&1)
 assert_status "$rc" 3 "non-numeric SUPERCRITIC_TIMEOUT exits 3"
 assert_contains "$out" "positive integer" "non-numeric timeout message"
 
+# --- the timeout watcher must not leak its own sleep ---
+# Killing the watcher subshell does not kill the `sleep` it is blocked on, so
+# every fallback run — including successful ones — left a sleep alive for the
+# whole timeout window, holding the engine's stdin open with it. The watcher's
+# sleep is observable hermetically: `sleep` is resolved through the test's own
+# bin dir, so a shim there records its pid before exec'ing the real one.
+WATCH_BIN="$TEST_ROOT/watch-bin"
+hermetic_bin "$WATCH_BIN"
+SLEEP_LOG="$TEST_ROOT/sleep.log"
+rm -f "$SLEEP_LOG"
+REAL_SLEEP=$(command -v sleep)
+rm -f "$WATCH_BIN/sleep"   # hermetic_bin left a symlink here; writing through it would hit the real binary
+cat >"$WATCH_BIN/sleep" <<STUB
+#!/usr/bin/env bash
+echo "\$\$ \$*" >>"$SLEEP_LOG"
+exec "$REAL_SLEEP" "\$@"
+STUB
+chmod +x "$WATCH_BIN/sleep"
+# The CLI takes ~1s so the watcher definitely reaches its `sleep $secs` before
+# the engine finishes — otherwise the watcher dies before forking it and the
+# recording assertion below would pass for the wrong reason.
+cat >"$TEST_ROOT/slowish-cli" <<'STUB'
+#!/usr/bin/env bash
+sleep 1
+echo "REVIEW_MARKER"
+STUB
+chmod +x "$TEST_ROOT/slowish-cli"
+cat >"$TEST_ROOT/watcher.conf" <<CONF
+SUPERCRITIC_CMD=("$TEST_ROOT/slowish-cli")
+SUPERCRITIC_ENABLED=1
+SUPERCRITIC_VERIFIED=1
+SUPERCRITIC_TIMEOUT=47
+CONF
+out=$(printf 'x' | PATH="$WATCH_BIN" SUPERCRITIC_CONF="$TEST_ROOT/watcher.conf" \
+  "$BASH" "$ENGINE" "f" - 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 0 "fast CLI through the fallback still succeeds"
+assert_contains "$out" "REVIEW_MARKER" "fast fallback run prints the review"
+sleep 1
+watcher_sleep_pid=$(awk '$2 == 47 { print $1; exit }' "$SLEEP_LOG" 2>/dev/null || true)
+if [ -n "$watcher_sleep_pid" ]; then pass "watcher's own sleep was recorded"
+else fail "watcher's own sleep was recorded"; fi
+if [ -n "$watcher_sleep_pid" ] && ! kill -0 "$watcher_sleep_pid" 2>/dev/null; then
+  pass "watcher leaves no orphaned sleep behind"
+else
+  fail "watcher leaves no orphaned sleep behind"; kill -KILL "$watcher_sleep_pid" 2>/dev/null || true
+fi
+
 if [ "$FAILURES" -gt 0 ]; then echo "$FAILURES supercritic engine test(s) failed"; exit 1; fi
 echo "All supercritic engine tests passed"

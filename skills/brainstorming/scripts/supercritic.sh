@@ -54,14 +54,26 @@ run_with_timeout() {
     set -m
     "$@" </dev/null &
     pid=$!
-    set +m
-    # Watcher must not inherit our stdout: when the engine's output is being
-    # captured, an orphaned sleep holding the pipe would stall the capture.
-    # TERM then KILL after the same 5-second grace the GNU path uses.
-    ( sleep "$secs"; kill -TERM -- -"$pid" 2>/dev/null; sleep 5; kill -KILL -- -"$pid" 2>/dev/null ) >/dev/null 2>&1 &
+    # The watcher is started under `set -m` too, so it leads its own process
+    # group and can be group-killed on the way out. Killing the subshell alone
+    # orphans the `sleep` it is blocked on, which then holds our stdin open for
+    # the rest of the timeout window — on every run, successful ones included.
+    # Its output goes to /dev/null: when the engine's output is being captured,
+    # an orphan holding that pipe would stall the capture.
+    # TERM then KILL after the same 5-second grace the GNU path uses. Each kill
+    # signals the group and then the pid alone, so a platform where `set -m`
+    # does not give the job its own group degrades to a single-pid kill rather
+    # than silently killing nothing at all.
+    (
+      sleep "$secs"
+      kill -TERM -- -"$pid" 2>/dev/null; kill -TERM "$pid" 2>/dev/null
+      sleep 5
+      kill -KILL -- -"$pid" 2>/dev/null; kill -KILL "$pid" 2>/dev/null
+    ) >/dev/null 2>&1 &
     watcher=$!
+    set +m
     wait "$pid" 2>/dev/null || rc=$?
-    kill -TERM "$watcher" 2>/dev/null || true
+    kill -TERM -- -"$watcher" 2>/dev/null || kill -TERM "$watcher" 2>/dev/null || true
     return "$rc"
   fi
 }
