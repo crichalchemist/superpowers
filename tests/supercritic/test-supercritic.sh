@@ -321,5 +321,23 @@ out=$( { head -c 100000 /dev/zero | tr '\0' 'a'; printf '\nTAIL_AFTER_THE_BOUNDA
 assert_status "$rc" 6 "newline at the cap boundary exits 6"
 assert_not_contains "$out" "REVIEW_MARKER" "boundary stream is refused, never reviewed truncated"
 
+# --- a hung git must not hang the engine ---
+# The tracked-conf check protects against a hostile clone, so a git that never
+# answers means we cannot prove the conf is untracked: refuse, do not proceed.
+GIT_BIN="$TEST_ROOT/git-bin"
+hermetic_bin "$GIT_BIN"
+cat >"$GIT_BIN/git" <<'STUB'
+#!/usr/bin/env bash
+sleep 30
+STUB
+chmod +x "$GIT_BIN/git"
+start=$(date +%s)
+out=$(PATH="$GIT_BIN" SUPERCRITIC_CONF="$TEST_ROOT/ok2.conf" \
+  "$BASH" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
+elapsed=$(( $(date +%s) - start ))
+assert_status "$rc" 3 "hung git check exits 3"
+assert_contains "$out" "timed out" "hung git check message"
+if [ "$elapsed" -le 15 ]; then pass "hung git check gives up in ~10s"; else fail "hung git check took ${elapsed}s"; fi
+
 if [ "$FAILURES" -gt 0 ]; then echo "$FAILURES supercritic engine test(s) failed"; exit 1; fi
 echo "All supercritic engine tests passed"

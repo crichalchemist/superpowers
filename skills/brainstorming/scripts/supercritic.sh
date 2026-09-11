@@ -27,6 +27,35 @@ set -euo pipefail
 
 die() { echo "supercritic: $1" >&2; exit "$2"; }
 
+# Portable timeout: GNU timeout, gtimeout (macOS coreutils), or a bash fallback.
+run_with_timeout() {
+  local secs=$1; shift
+  if command -v timeout >/dev/null 2>&1; then
+    timeout -k 5 "$secs" "$@" </dev/null
+  elif command -v gtimeout >/dev/null 2>&1; then
+    gtimeout -k 5 "$secs" "$@" </dev/null
+  else
+    # Fallback: run the CLI in its own process group (set -m) so the watcher can
+    # signal the WHOLE group. A CLI that forks a long-lived grandchild would
+    # otherwise outlive a kill aimed at its pid alone — and that grandchild
+    # inherits our stdout, so it holds the output pipe open and stalls the
+    # caller's capture long past the timeout.
+    local pid watcher rc=0
+    set -m
+    "$@" </dev/null &
+    pid=$!
+    set +m
+    # Watcher must not inherit our stdout: when the engine's output is being
+    # captured, an orphaned sleep holding the pipe would stall the capture.
+    # TERM then KILL after the same 5-second grace the GNU path uses.
+    ( sleep "$secs"; kill -TERM -- -"$pid" 2>/dev/null; sleep 5; kill -KILL -- -"$pid" 2>/dev/null ) >/dev/null 2>&1 &
+    watcher=$!
+    wait "$pid" 2>/dev/null || rc=$?
+    kill -TERM "$watcher" 2>/dev/null || true
+    return "$rc"
+  fi
+}
+
 if [ $# -lt 2 ]; then
   echo "usage: $0 \"<focus>\" <file|->" >&2
   exit 2
@@ -39,8 +68,16 @@ conf=${SUPERCRITIC_CONF:-.superpowers/supercritic.conf}
 # Sourcing executes the conf. A conf tracked by git could arrive in a hostile
 # clone and run attacker bash the first time a consume hook fires. Legit confs
 # are always untracked (setup step 5 gitignores .superpowers/), so refuse.
-if command -v git >/dev/null 2>&1 && git ls-files --error-unmatch -- "$conf" >/dev/null 2>&1; then
-  die "$conf is tracked by git — refusing to source it (a committed conf can execute arbitrary code; untrack it and gitignore .superpowers/)" 3
+# A hung git (network filesystem, an index lock held elsewhere) must not hang
+# the engine, so the check is itself timeout-guarded. rc 1 means untracked and
+# 128 means "not a git repo" — both are normal, fall through.
+if command -v git >/dev/null 2>&1; then
+  git_rc=0
+  run_with_timeout 10 git ls-files --error-unmatch -- "$conf" >/dev/null 2>&1 || git_rc=$?
+  case "$git_rc" in
+    0) die "$conf is tracked by git — refusing to source it (a committed conf can execute arbitrary code; untrack it and gitignore .superpowers/)" 3 ;;
+    124 | 137 | 143) die "git tracked-conf check timed out after 10s — refusing to source $conf (cannot prove it is untracked; untrack it and gitignore .superpowers/)" 3 ;;
+  esac
 fi
 # shellcheck source=/dev/null
 . "$conf"
@@ -109,35 +146,6 @@ Be critical, specific, and concrete; reference section names or quote the exact 
 ${content}
 EOF
 )
-
-# Portable timeout: GNU timeout, gtimeout (macOS coreutils), or a bash fallback.
-run_with_timeout() {
-  local secs=$1; shift
-  if command -v timeout >/dev/null 2>&1; then
-    timeout -k 5 "$secs" "$@" </dev/null
-  elif command -v gtimeout >/dev/null 2>&1; then
-    gtimeout -k 5 "$secs" "$@" </dev/null
-  else
-    # Fallback: run the CLI in its own process group (set -m) so the watcher can
-    # signal the WHOLE group. A CLI that forks a long-lived grandchild would
-    # otherwise outlive a kill aimed at its pid alone — and that grandchild
-    # inherits our stdout, so it holds the output pipe open and stalls the
-    # caller's capture long past the timeout.
-    local pid watcher rc=0
-    set -m
-    "$@" </dev/null &
-    pid=$!
-    set +m
-    # Watcher must not inherit our stdout: when the engine's output is being
-    # captured, an orphaned sleep holding the pipe would stall the capture.
-    # TERM then KILL after the same 5-second grace the GNU path uses.
-    ( sleep "$secs"; kill -TERM -- -"$pid" 2>/dev/null; sleep 5; kill -KILL -- -"$pid" 2>/dev/null ) >/dev/null 2>&1 &
-    watcher=$!
-    wait "$pid" 2>/dev/null || rc=$?
-    kill -TERM "$watcher" 2>/dev/null || true
-    return "$rc"
-  fi
-}
 
 rc=0
 review=$(run_with_timeout "$timeout_secs" "${SUPERCRITIC_CMD[@]}" "$prompt") || rc=$?
