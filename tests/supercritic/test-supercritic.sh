@@ -22,6 +22,24 @@ assert_status() {
   if [ "$1" -eq "$2" ]; then pass "$3"
   else fail "$3"; echo "    expected exit $2, got $1"; fi
 }
+assert_not_contains() {
+  if printf '%s' "$1" | grep -Fq -- "$2"; then fail "$3"; echo "    did not expect: $2"
+  else pass "$3"; fi
+}
+
+# Build a self-contained bin dir holding only the coreutils the engine needs,
+# symlinked by absolute path. Tests that must control what the engine finds on
+# PATH point PATH at one of these and nothing else — never at ":$PATH", which
+# would let the host's timeout/gtimeout leak in and skip the path under test.
+# `bash` is included because the stub CLIs start with `#!/usr/bin/env bash`.
+hermetic_bin() {
+  local dir=$1 util util_path
+  mkdir -p "$dir"
+  for util in bash cat head sleep wc; do
+    util_path=$(command -v "$util") || { echo "  [FAIL] hermetic_bin: no $util on PATH"; exit 1; }
+    ln -sf "$util_path" "$dir/$util"
+  done
+}
 
 # Stub CLI: echoes a marker plus everything it received as args, and brackets
 # any stdin it sees so "empty" is distinguishable (proves the engine closes stdin).
@@ -198,6 +216,42 @@ CONF
 out=$(SUPERCRITIC_CONF="$TEST_ROOT/silent.conf" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
 assert_status "$rc" 1 "empty CLI output exits 1"
 assert_contains "$out" "no output" "empty CLI output message"
+
+# --- bare SUPERCRITIC_CMD[0] is resolved through PATH once, out loud ---
+# A bare name resolves at run time, so a changed PATH would run a different
+# binary than the one approved at setup. The engine pins it and says so.
+# $BASH is the running interpreter's absolute path — avoids PATH lookup for bash.
+BARE_BIN="$TEST_ROOT/bare-bin"
+hermetic_bin "$BARE_BIN"
+cp "$TEST_ROOT/echo-cli" "$BARE_BIN/barecli"
+cat >"$TEST_ROOT/bare.conf" <<CONF
+SUPERCRITIC_CMD=(barecli)
+SUPERCRITIC_ENABLED=1
+SUPERCRITIC_VERIFIED=1
+SUPERCRITIC_TIMEOUT=10
+CONF
+out=$(printf 'x' | PATH="$BARE_BIN" SUPERCRITIC_CONF="$TEST_ROOT/bare.conf" \
+  "$BASH" "$ENGINE" "f" - 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 0 "bare SUPERCRITIC_CMD resolves and runs"
+assert_contains "$out" "resolved barecli -> $BARE_BIN/barecli" "resolution line names the absolute path"
+assert_contains "$out" "REVIEW_MARKER" "resolved bare name reaches the CLI"
+
+# --- bare name that resolves to nothing: fail loud, do not run anything ---
+cat >"$TEST_ROOT/unresolvable.conf" <<CONF
+SUPERCRITIC_CMD=(no-such-supercritic-cli)
+SUPERCRITIC_ENABLED=1
+SUPERCRITIC_VERIFIED=1
+SUPERCRITIC_TIMEOUT=10
+CONF
+out=$(PATH="$BARE_BIN" SUPERCRITIC_CONF="$TEST_ROOT/unresolvable.conf" \
+  "$BASH" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 1 "unresolvable SUPERCRITIC_CMD exits 1"
+assert_contains "$out" "not found on PATH" "unresolvable cmd message"
+
+# --- an absolute SUPERCRITIC_CMD[0] is already pinned: no resolution line ---
+out=$(printf 'x' | SUPERCRITIC_CONF="$conf" "$ENGINE" "f" - 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 0 "absolute SUPERCRITIC_CMD still works"
+assert_not_contains "$out" "resolved" "absolute SUPERCRITIC_CMD prints no resolution line"
 
 if [ "$FAILURES" -gt 0 ]; then echo "$FAILURES supercritic engine test(s) failed"; exit 1; fi
 echo "All supercritic engine tests passed"

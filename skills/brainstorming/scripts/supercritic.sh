@@ -54,6 +54,23 @@ fi
 if ! declare -p SUPERCRITIC_CMD >/dev/null 2>&1 || [ "${#SUPERCRITIC_CMD[@]}" -lt 1 ]; then
   die "SUPERCRITIC_CMD not set as a non-empty bash array in $conf"
 fi
+# A bare name in SUPERCRITIC_CMD resolves through $PATH at run time, so a PATH
+# change between setup and now would silently run a different binary than the
+# one the user approved. Pin it once, out loud, before the CLI can run.
+case "${SUPERCRITIC_CMD[0]}" in
+  */*) ;;
+  *)
+    resolved=$(command -v -- "${SUPERCRITIC_CMD[0]}") \
+      || die "SUPERCRITIC_CMD[0] '${SUPERCRITIC_CMD[0]}' not found on PATH (put the absolute path detect-supercritic.sh reported into $conf)"
+    case "$resolved" in
+      */*) ;;
+      *) die "SUPERCRITIC_CMD[0] '${SUPERCRITIC_CMD[0]}' resolves to a shell builtin, not a binary (put the absolute path detect-supercritic.sh reported into $conf)" ;;
+    esac
+    echo "supercritic: resolved ${SUPERCRITIC_CMD[0]} -> $resolved" >&2
+    SUPERCRITIC_CMD[0]=$resolved
+    ;;
+esac
+
 timeout_secs=${SUPERCRITIC_TIMEOUT:-120}
 
 if [ "$src" = "-" ]; then
