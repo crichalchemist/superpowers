@@ -101,19 +101,19 @@ assert_contains "$out" "hello-artifact" "piped content reaches the CLI prompt"
 # bracketed marker is "STDIN:[]" only when nothing leaked through:
 assert_contains "$out" "STDIN:[]" "engine closes the CLI's stdin (no leakage)"
 
-# --- missing conf: fail loud, exit 1 ---
+# --- missing conf: fail loud, exit 3 ---
 out=$(SUPERCRITIC_CONF="$TEST_ROOT/nope.conf" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
-assert_status "$rc" 1 "missing conf exits 1"
+assert_status "$rc" 3 "missing conf exits 3"
 assert_contains "$out" "no config" "missing conf message"
 
-# --- disabled conf: skip with exit 1 ---
+# --- disabled conf: skip with exit 3 ---
 cat >"$TEST_ROOT/dis.conf" <<CONF
 SUPERCRITIC_CMD=("$TEST_ROOT/echo-cli")
 SUPERCRITIC_ENABLED=0
 SUPERCRITIC_VERIFIED=1
 CONF
 out=$(SUPERCRITIC_CONF="$TEST_ROOT/dis.conf" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
-assert_status "$rc" 1 "disabled conf exits 1"
+assert_status "$rc" 3 "disabled conf exits 3"
 assert_contains "$out" "disabled" "disabled conf message"
 
 # --- CLI fails: surface non-zero ---
@@ -124,7 +124,7 @@ SUPERCRITIC_VERIFIED=1
 SUPERCRITIC_TIMEOUT=10
 CONF
 out=$(SUPERCRITIC_CONF="$TEST_ROOT/fail.conf" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
-assert_status "$rc" 1 "failing CLI exits 1"
+assert_status "$rc" 5 "failing CLI exits 5"
 assert_contains "$out" "exit 3" "failing CLI reports its exit code"
 
 # --- timeout: fail loud and FAST ---
@@ -137,18 +137,18 @@ CONF
 start=$(date +%s)
 out=$(SUPERCRITIC_CONF="$TEST_ROOT/slow.conf" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
 elapsed=$(( $(date +%s) - start ))
-assert_status "$rc" 1 "timeout exits 1"
+assert_status "$rc" 4 "timeout exits 4"
 assert_contains "$out" "timed out" "timeout message"
 if [ "$elapsed" -le 5 ]; then pass "timeout fires fast (<=5s)"; else fail "timeout too slow (${elapsed}s)"; fi
 
-# --- unverified conf: fail loud, exit 1 ---
+# --- unverified conf: fail loud, exit 3 ---
 cat >"$TEST_ROOT/unverified.conf" <<CONF
 SUPERCRITIC_CMD=("$TEST_ROOT/echo-cli")
 SUPERCRITIC_ENABLED=1
 SUPERCRITIC_VERIFIED=0
 CONF
 out=$(SUPERCRITIC_CONF="$TEST_ROOT/unverified.conf" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
-assert_status "$rc" 1 "unverified conf exits 1"
+assert_status "$rc" 3 "unverified conf exits 3"
 assert_contains "$out" "not verified" "unverified conf message"
 
 # --- setup lifecycle: SUPERCRITIC_SMOKE=1 bypasses ONLY the verified gate ---
@@ -159,17 +159,17 @@ assert_contains "$out" "REVIEW_MARKER" "smoke run reaches the CLI"
 
 # --- SUPERCRITIC_SMOKE must not override the enabled gate ---
 out=$(SUPERCRITIC_CONF="$TEST_ROOT/dis.conf" SUPERCRITIC_SMOKE=1 "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
-assert_status "$rc" 1 "SUPERCRITIC_SMOKE=1 still respects SUPERCRITIC_ENABLED=0"
+assert_status "$rc" 3 "SUPERCRITIC_SMOKE=1 still respects SUPERCRITIC_ENABLED=0"
 assert_contains "$out" "disabled" "smoke-on-disabled message"
 
-# --- empty SUPERCRITIC_CMD: fail loud, exit 1 ---
+# --- empty SUPERCRITIC_CMD: fail loud, exit 3 ---
 cat >"$TEST_ROOT/emptycmd.conf" <<CONF
 SUPERCRITIC_CMD=()
 SUPERCRITIC_ENABLED=1
 SUPERCRITIC_VERIFIED=1
 CONF
 out=$(SUPERCRITIC_CONF="$TEST_ROOT/emptycmd.conf" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
-assert_status "$rc" 1 "empty SUPERCRITIC_CMD exits 1"
+assert_status "$rc" 3 "empty SUPERCRITIC_CMD exits 3"
 assert_contains "$out" "SUPERCRITIC_CMD" "empty cmd message mentions SUPERCRITIC_CMD"
 
 # --- missing file: fail loud, exit 2 ---
@@ -195,7 +195,7 @@ SUPERCRITIC_VERIFIED=1
 CONF
 git -C "$TEST_ROOT/hostile-repo" add .superpowers/supercritic.conf
 out=$(cd "$TEST_ROOT/hostile-repo" && "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
-assert_status "$rc" 1 "tracked conf exits 1"
+assert_status "$rc" 3 "tracked conf exits 3"
 assert_contains "$out" "tracked by git" "tracked conf refusal message"
 
 # --- untracked conf inside a git repo: normal operation ---
@@ -213,7 +213,7 @@ assert_contains "$out" "REVIEW_MARKER" "untracked-conf run prints CLI output"
 
 # --- oversize content: refuse before exec (single-argv ~128 KiB cap on Linux) ---
 out=$(head -c 120000 /dev/zero | tr '\0' 'a' | SUPERCRITIC_CONF="$TEST_ROOT/ok2.conf" "$ENGINE" "f" - 2>&1) && rc=0 || rc=$?
-assert_status "$rc" 1 "oversize content exits 1"
+assert_status "$rc" 6 "oversize content exits 6"
 assert_contains "$out" "too large" "oversize content message"
 
 # --- CLI exits 0 with no output: fail loud, not silent success ---
@@ -224,7 +224,7 @@ SUPERCRITIC_VERIFIED=1
 SUPERCRITIC_TIMEOUT=10
 CONF
 out=$(SUPERCRITIC_CONF="$TEST_ROOT/silent.conf" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
-assert_status "$rc" 1 "empty CLI output exits 1"
+assert_status "$rc" 5 "empty CLI output exits 5"
 assert_contains "$out" "no output" "empty CLI output message"
 
 # --- bare SUPERCRITIC_CMD[0] is resolved through PATH once, out loud ---
@@ -255,7 +255,7 @@ SUPERCRITIC_TIMEOUT=10
 CONF
 out=$(PATH="$BARE_BIN" SUPERCRITIC_CONF="$TEST_ROOT/unresolvable.conf" \
   "$BASH" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
-assert_status "$rc" 1 "unresolvable SUPERCRITIC_CMD exits 1"
+assert_status "$rc" 3 "unresolvable SUPERCRITIC_CMD exits 3"
 assert_contains "$out" "not found on PATH" "unresolvable cmd message"
 
 # --- an absolute SUPERCRITIC_CMD[0] is already pinned: no resolution line ---
@@ -280,7 +280,7 @@ start=$(date +%s)
 out=$(PATH="$FB_BIN" GC_PIDFILE="$GC_PIDFILE" SUPERCRITIC_CONF="$TEST_ROOT/fb.conf" \
   "$BASH" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
 elapsed=$(( $(date +%s) - start ))
-assert_status "$rc" 1 "timeout fallback exits 1"
+assert_status "$rc" 4 "timeout fallback exits 4"
 assert_contains "$out" "timed out" "timeout fallback message"
 if [ "$elapsed" -le 5 ]; then pass "timeout fallback fires fast (<=5s)"; else fail "timeout fallback too slow (${elapsed}s)"; fi
 sleep 1

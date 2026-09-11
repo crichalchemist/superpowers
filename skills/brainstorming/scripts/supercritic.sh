@@ -25,7 +25,7 @@
 # CLI fails loud, never hangs.
 set -euo pipefail
 
-die() { echo "supercritic: $*" >&2; exit 1; }
+die() { echo "supercritic: $1" >&2; exit "$2"; }
 
 if [ $# -lt 2 ]; then
   echo "usage: $0 \"<focus>\" <file|->" >&2
@@ -35,24 +35,24 @@ focus=$1
 src=$2
 
 conf=${SUPERCRITIC_CONF:-.superpowers/supercritic.conf}
-[ -f "$conf" ] || die "no config at $conf (run detect-supercritic.sh and configure first)"
+[ -f "$conf" ] || die "no config at $conf (run detect-supercritic.sh and configure first)" 3
 # Sourcing executes the conf. A conf tracked by git could arrive in a hostile
 # clone and run attacker bash the first time a consume hook fires. Legit confs
 # are always untracked (setup step 5 gitignores .superpowers/), so refuse.
 if command -v git >/dev/null 2>&1 && git ls-files --error-unmatch -- "$conf" >/dev/null 2>&1; then
-  die "$conf is tracked by git — refusing to source it (a committed conf can execute arbitrary code; untrack it and gitignore .superpowers/)"
+  die "$conf is tracked by git — refusing to source it (a committed conf can execute arbitrary code; untrack it and gitignore .superpowers/)" 3
 fi
 # shellcheck source=/dev/null
 . "$conf"
 
-[ "${SUPERCRITIC_ENABLED:-0}" = "1" ] || die "supercritic disabled in $conf"
+[ "${SUPERCRITIC_ENABLED:-0}" = "1" ] || die "supercritic disabled in $conf" 3
 if [ "${SUPERCRITIC_SMOKE:-0}" != "1" ]; then
-  [ "${SUPERCRITIC_VERIFIED:-0}" = "1" ] || die "supercritic not verified in $conf (smoke test never passed)"
+  [ "${SUPERCRITIC_VERIFIED:-0}" = "1" ] || die "supercritic not verified in $conf (smoke test never passed)" 3
 fi
 # SUPERCRITIC_CMD is set by the sourced conf above; shellcheck cannot follow the source.
 # shellcheck disable=SC2154
 if ! declare -p SUPERCRITIC_CMD >/dev/null 2>&1 || [ "${#SUPERCRITIC_CMD[@]}" -lt 1 ]; then
-  die "SUPERCRITIC_CMD not set as a non-empty bash array in $conf"
+  die "SUPERCRITIC_CMD not set as a non-empty bash array in $conf" 3
 fi
 # A bare name in SUPERCRITIC_CMD resolves through $PATH at run time, so a PATH
 # change between setup and now would silently run a different binary than the
@@ -61,10 +61,10 @@ case "${SUPERCRITIC_CMD[0]}" in
   */*) ;;
   *)
     resolved=$(command -v -- "${SUPERCRITIC_CMD[0]}") \
-      || die "SUPERCRITIC_CMD[0] '${SUPERCRITIC_CMD[0]}' not found on PATH (put the absolute path detect-supercritic.sh reported into $conf)"
+      || die "SUPERCRITIC_CMD[0] '${SUPERCRITIC_CMD[0]}' not found on PATH (put the absolute path detect-supercritic.sh reported into $conf)" 3
     case "$resolved" in
       */*) ;;
-      *) die "SUPERCRITIC_CMD[0] '${SUPERCRITIC_CMD[0]}' resolves to a shell builtin, not a binary (put the absolute path detect-supercritic.sh reported into $conf)" ;;
+      *) die "SUPERCRITIC_CMD[0] '${SUPERCRITIC_CMD[0]}' resolves to a shell builtin, not a binary (put the absolute path detect-supercritic.sh reported into $conf)" 3 ;;
     esac
     echo "supercritic: resolved ${SUPERCRITIC_CMD[0]} -> $resolved" >&2
     SUPERCRITIC_CMD[0]=$resolved
@@ -84,7 +84,7 @@ fi
 # ~128 KiB (MAX_ARG_STRLEN). Bound well below the cap and fail loud.
 content_bytes=$(( $(printf '%s' "$content" | wc -c) ))
 if [ "$content_bytes" -gt 100000 ]; then
-  die "content too large (${content_bytes} bytes > 100000) — narrow the diff or split the review"
+  die "content too large (${content_bytes} bytes > 100000) — narrow the diff or split the review" 6
 fi
 
 prompt=$(cat <<EOF
@@ -133,10 +133,10 @@ review=$(run_with_timeout "$timeout_secs" "${SUPERCRITIC_CMD[@]}" "$prompt") || 
 if [ "$rc" -ne 0 ]; then
   # 124 = GNU timeout; 137 = 128+SIGKILL (timeout -k); 143 = 128+SIGTERM from the bash fallback.
   if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ] || [ "$rc" -eq 143 ]; then
-    die "supercritic CLI timed out after ${timeout_secs}s (check SUPERCRITIC_CMD invocation)"
+    die "supercritic CLI timed out after ${timeout_secs}s (check SUPERCRITIC_CMD invocation)" 4
   fi
-  die "supercritic CLI failed (exit $rc)"
+  die "supercritic CLI failed (exit $rc)" 5
 fi
 # An empty review exiting 0 would read as "nothing to address" — fail loud instead.
-[ -n "$review" ] || die "supercritic CLI exited 0 but produced no output (check SUPERCRITIC_CMD invocation)"
+[ -n "$review" ] || die "supercritic CLI exited 0 but produced no output (check SUPERCRITIC_CMD invocation)" 5
 printf '%s\n' "$review"
