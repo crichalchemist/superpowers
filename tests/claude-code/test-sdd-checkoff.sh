@@ -52,10 +52,13 @@ boxes_open()    { grep -c '^\s*- \[ \]' "$1" || true; }
 # --- 1. completed task's boxes all flip / 2. incomplete task untouched ---
 r=$(new_repo); write_plan "$r" demo
 write_ledger "$r" demo "Task 1: complete (commits abc1234..def5678, review clean)"
-( cd "$r" && "$CHECKOFF" docs/superpowers/plans/demo.md >/dev/null 2>&1 )
 p="$r/docs/superpowers/plans/demo.md"
+mode_before=$(stat -f %Lp "$p" 2>/dev/null || stat -c %a "$p")
+( cd "$r" && "$CHECKOFF" docs/superpowers/plans/demo.md >/dev/null 2>&1 )
 if [ "$(boxes_checked "$p")" = "2" ]; then pass "completed task's boxes all flip"; else fail "completed task's boxes all flip"; fi
 if [ "$(boxes_open "$p")" = "2" ]; then pass "mid-loop task keeps its boxes unchecked"; else fail "mid-loop task keeps its boxes unchecked"; fi
+mode_after=$(stat -f %Lp "$p" 2>/dev/null || stat -c %a "$p")
+if [ "$mode_before" = "$mode_after" ]; then pass "plan file mode is preserved across a flip"; else fail "plan file mode is preserved across a flip (before=$mode_before after=$mode_after)"; fi
 
 # --- 3. fenced checkbox survives / 13. inline prose checkbox survives ---
 r=$(new_repo)
@@ -133,6 +136,19 @@ before=$(cksum < "$p")
 ( cd "$r" && "$CHECKOFF" docs/superpowers/plans/noledger.md >/dev/null 2>&1 ); rc=$?
 if [ "$rc" = "0" ] && [ "$before" = "$(cksum < "$p")" ]; then pass "absent ledger leaves the plan untouched, exits 0"; else fail "absent ledger leaves the plan untouched, exits 0"; fi
 
+# --- countfile does not leak on a flipping run ---
+r=$(new_repo); write_plan "$r" leak
+write_ledger "$r" leak "Task 1: complete (commits 1111111..2222222, review clean)"
+sysTmp=$(dirname "$(mktemp -u)")
+marker=$(mktemp)
+( cd "$r" && "$CHECKOFF" docs/superpowers/plans/leak.md >/dev/null 2>&1 )
+# -newer marker (created immediately before the run) rather than a before/after
+# directory diff, so unrelated tmp.* churn elsewhere in the shared system temp
+# dir can't produce a false failure.
+new_tmp=$(find "$sysTmp" -maxdepth 1 -name 'tmp.*' -type f -newer "$marker" 2>/dev/null | grep -vF "$marker" | sort)
+rm -f "$marker"
+if [ -z "$new_tmp" ]; then pass "countfile does not leak on a flipping run"; else fail "countfile leaks on a flipping run: $new_tmp"; fi
+
 # --- 9. foreign ledger refused, exit 3 ---
 r=$(new_repo); write_plan "$r" mine
 mkdir -p "$r/.superpowers/sdd/mine"
@@ -197,6 +213,7 @@ cat > "$r/docs/superpowers/plans/nested.md" <<'PLAN'
 ````markdown
 ```bash
 echo hi
+- [ ] **Step 1: inside the inner fence**
 ```
 ````
 
@@ -204,17 +221,30 @@ echo hi
 PLAN
 write_ledger "$r" nested "Task 1: complete (commits fffffff..0000000, review clean)"
 ( cd "$r" && "$CHECKOFF" docs/superpowers/plans/nested.md >/dev/null 2>&1 )
-# The toggle desyncs across nested fences; this pins current behavior so the
-# limitation stays documented rather than silently changing. See the spec's
-# "Fence model — stated limits".
+# The toggle desyncs across nested fences: the inner ```bash line flips
+# infence back off, so the box inside the inner fence is (wrongly) treated as
+# unfenced and flips along with the box after the block. This pins that
+# documented toggle limitation exactly, so a future fence-model change trips
+# this test instead of silently changing behavior. See the spec's "Fence
+# model — stated limits".
 n=$(boxes_checked "$r/docs/superpowers/plans/nested.md")
-if [ "$n" = "0" ] || [ "$n" = "1" ]; then pass "nested >=4-backtick fence behavior is pinned (observed: $n)"; else fail "nested fence pinned"; fi
+if [ "$n" = "2" ]; then pass "nested >=4-backtick fence behavior is pinned (observed: $n)"; else fail "nested fence pinned (expected 2, observed: $n)"; fi
 
 # --- 11. usage / missing plan ---
 ( "$CHECKOFF" >/dev/null 2>&1 ); if [ "$?" = "2" ]; then pass "no args exits 2"; else fail "no args exits 2"; fi
 ( "$CHECKOFF" /nope/missing.md >/dev/null 2>&1 ); if [ "$?" = "2" ]; then pass "missing plan exits 2"; else fail "missing plan exits 2"; fi
 
 # --- 12. parser agreement with task-brief on real plans ---
+# --print-range is a verbatim copy of task-brief's awk, so comparing against
+# it only proves that copy agrees with itself. Prove the main flipping pass
+# agrees instead: run sdd-checkoff for real on a scratch copy of each plan
+# and compare the boxes it actually flipped against task-brief's extracted
+# range for that task. None of these three plans have any pre-existing
+# `- [x]` box (verified separately), so every `- [x]` line found in the
+# scratch copy after the run is one this run flipped. (Also depends on none
+# of the plans having a checkbox inside a re-entrant same-numbered heading
+# outside the real task range, e.g. an embedded fixture doc — verified true
+# for tasks 1-3 today; a plan edit adding one would need this test revisited.)
 agree=1
 for f in 2026-06-09-sdd-task-scoped-review-dispatch 2026-07-06-sdd-plan-scoped-workspace 2026-07-15-sdd-fix-loop-redesign; do
   plan="$REPO_ROOT/docs/superpowers/plans/$f.md"
@@ -222,11 +252,17 @@ for f in 2026-06-09-sdd-task-scoped-review-dispatch 2026-07-06-sdd-plan-scoped-w
   for n in 1 2 3; do
     brief=$(mktemp)
     if "$TASK_BRIEF" "$plan" "$n" "$brief" >/dev/null 2>&1; then
-      # task-brief's extracted range must contain exactly the boxes sdd-checkoff
-      # would flip for that task: compare open-box counts.
-      tb=$(grep -c '^\s*- \[ \]' "$brief" || true)
-      co=$("$CHECKOFF" --print-range "$plan" "$n" 2>/dev/null | grep -c '^\s*- \[ \]' || true)
-      [ "$tb" = "$co" ] || { agree=0; echo "    mismatch: $f Task $n (task-brief=$tb sdd-checkoff=$co)"; }
+      r=$(new_repo)
+      cp "$plan" "$r/docs/superpowers/plans/$f.md"
+      write_ledger "$r" "$f" "Task $n: complete (commits 0000000..1111111, review clean)"
+      copy="$r/docs/superpowers/plans/$f.md"
+      ( cd "$r" && "$CHECKOFF" "docs/superpowers/plans/$f.md" >/dev/null 2>&1 )
+      flipped=$(grep '^\s*- \[x\]' "$copy" | sed 's/^\([[:space:]]*\)- \[x\]/\1- [ ]/' | sort)
+      expected=$(grep '^\s*- \[ \]' "$brief" | sort)
+      if ! diff <(printf '%s\n' "$flipped") <(printf '%s\n' "$expected") >/dev/null; then
+        agree=0
+        echo "    mismatch: $f Task $n"
+      fi
     fi
     rm -f "$brief"
   done
