@@ -337,6 +337,58 @@ touch_in "$r" src/from-a-fence.txt
 ( cd "$r" && "$CHECKOFF" docs/superpowers/plans/fencedfiles.md >/dev/null 2>&1 ); rc=$?
 if [ "$rc" = "4" ]; then pass "Files lines inside a fence do not count as evidence"; else fail "Files lines inside a fence do not count as evidence (rc=$rc)"; fi
 
+# --- 24. --done: verified task flips, exit 0 ---
+r=$(new_repo); write_plan "$r" done1
+p="$r/docs/superpowers/plans/done1.md"
+( cd "$r" && "$CHECKOFF" --done 2 docs/superpowers/plans/done1.md >/dev/null 2>&1 ); rc=$?
+if [ "$rc" = "0" ] && grep -q '^- \[x\] \*\*Step 1: gamma' "$p" && grep -q '^- \[ \] \*\*Step 1: alpha' "$p"; then pass "--done flips only the named task"; else fail "--done flips only the named task (rc=$rc)"; fi
+
+# --- 25. --done: missing Create path refuses, exit 4, file unchanged ---
+r=$(new_repo); write_plan "$r" done2; rm "$r/src/gamma.txt"
+p="$r/docs/superpowers/plans/done2.md"; before=$(cksum < "$p")
+err=$( cd "$r" && "$CHECKOFF" --done 2 docs/superpowers/plans/done2.md 2>&1 >/dev/null ); rc=$?
+if [ "$rc" = "4" ] && [ "$before" = "$(cksum < "$p")" ]; then pass "--done with a missing path refuses, exit 4"; else fail "--done with a missing path refuses, exit 4 (rc=$rc)"; fi
+if printf '%s\n' "$err" | grep -q 'Task 2: missing: src/gamma.txt'; then pass "--done names the missing path"; else fail "--done names the missing path: $err"; fi
+
+# --- 26. --done: task listing no files refuses, exit 4 ---
+r=$(new_repo)
+cat > "$r/docs/superpowers/plans/done3.md" <<'PLAN'
+# Done No Files
+
+### Task 1: First
+
+- [ ] **Step 1: alpha**
+PLAN
+p="$r/docs/superpowers/plans/done3.md"; before=$(cksum < "$p")
+( cd "$r" && "$CHECKOFF" --done 1 docs/superpowers/plans/done3.md >/dev/null 2>&1 ); rc=$?
+if [ "$rc" = "4" ] && [ "$before" = "$(cksum < "$p")" ]; then pass "--done on a task listing no files refuses, exit 4"; else fail "--done on a task listing no files refuses, exit 4 (rc=$rc)"; fi
+
+# --- 27. --done 1 2 where 2 fails: 1 flips, 2 does not, exit 4 ---
+r=$(new_repo); write_plan "$r" done4; rm "$r/src/gamma.txt"
+p="$r/docs/superpowers/plans/done4.md"
+( cd "$r" && "$CHECKOFF" --done 1 2 docs/superpowers/plans/done4.md >/dev/null 2>&1 ); rc=$?
+if [ "$rc" = "4" ] && grep -q '^- \[x\] \*\*Step 1: alpha' "$p" && grep -q '^- \[ \] \*\*Step 1: gamma' "$p"; then pass "--done processes every task and exits 4 if any refused"; else fail "--done processes every task and exits 4 if any refused (rc=$rc)"; fi
+
+# --- 28. --done 9 on a two-task plan: exit 2, file unchanged ---
+r=$(new_repo); write_plan "$r" done5
+p="$r/docs/superpowers/plans/done5.md"; before=$(cksum < "$p")
+( cd "$r" && "$CHECKOFF" --done 9 docs/superpowers/plans/done5.md >/dev/null 2>&1 ); rc=$?
+if [ "$rc" = "2" ] && [ "$before" = "$(cksum < "$p")" ]; then pass "--done with an absent task number is a usage error"; else fail "--done with an absent task number is a usage error (rc=$rc)"; fi
+
+# --- 29. --done twice is idempotent (mtime unchanged on the second run) ---
+r=$(new_repo); write_plan "$r" done6
+p="$r/docs/superpowers/plans/done6.md"
+( cd "$r" && "$CHECKOFF" --done 1 docs/superpowers/plans/done6.md >/dev/null 2>&1 )
+mt1=$(stat -f %m "$p" 2>/dev/null || stat -c %Y "$p"); sleep 1
+( cd "$r" && "$CHECKOFF" --done 1 docs/superpowers/plans/done6.md >/dev/null 2>&1 ); rc=$?
+mt2=$(stat -f %m "$p" 2>/dev/null || stat -c %Y "$p")
+if [ "$rc" = "0" ] && [ "$mt1" = "$mt2" ]; then pass "second --done on the same task changes nothing, exit 0"; else fail "second --done on the same task changes nothing, exit 0 (rc=$rc)"; fi
+
+# --- 30. --done with a non-numeric argument is a usage error ---
+r=$(new_repo); write_plan "$r" done7
+( cd "$r" && "$CHECKOFF" --done two docs/superpowers/plans/done7.md >/dev/null 2>&1 ); rc=$?
+if [ "$rc" = "2" ]; then pass "--done rejects a non-numeric task"; else fail "--done rejects a non-numeric task (rc=$rc)"; fi
+
 # --- 11. usage / missing plan ---
 ( "$CHECKOFF" >/dev/null 2>&1 ); if [ "$?" = "2" ]; then pass "no args exits 2"; else fail "no args exits 2"; fi
 ( "$CHECKOFF" /nope/missing.md >/dev/null 2>&1 ); if [ "$?" = "2" ]; then pass "missing plan exits 2"; else fail "missing plan exits 2"; fi

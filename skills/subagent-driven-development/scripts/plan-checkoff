@@ -4,6 +4,7 @@
 #
 # Attestation, never inference:
 #   plan-checkoff PLAN_FILE                    SDD: tasks the ledger marks complete
+#   plan-checkoff --done N [N ...] PLAN_FILE   executing-plans: tasks the caller names
 #   plan-checkoff --print-range PLAN_FILE N    debug/parity: print one task's range
 #
 # A task verifies when every path in its Files: block (unfenced lines of the
@@ -13,7 +14,7 @@
 # refuses the whole task; other tasks in the run still proceed.
 #
 # Exit codes: 0 every attested task verified and flipped (or nothing to do)
-#             2 usage, missing plan, plan outside a git repository
+#             2 usage, missing plan, --done task absent from the plan, plan outside a git repository
 #             3 ledger refused (foreign, malformed, names an absent task)
 #             4 one or more attested tasks not flipped; others still processed
 #
@@ -27,6 +28,7 @@ say() { echo "plan-checkoff: $*" >&2; }
 
 usage() {
   echo "usage: plan-checkoff PLAN_FILE" >&2
+  echo "       plan-checkoff --done N [N ...] PLAN_FILE" >&2
   echo "       plan-checkoff --print-range PLAN_FILE TASK_NUMBER" >&2
   exit 2
 }
@@ -135,7 +137,16 @@ flip_tasks() {
 
 # ---- argument handling ------------------------------------------------------
 
+mode=ledger
 case "${1:-}" in
+  --done)
+    mode="done"; shift
+    done_list=""
+    while [ $# -gt 1 ]; do
+      case "$1" in ''|*[!0-9]*) die "--done takes task numbers, got '$1'" 2 ;; esac
+      done_list="$done_list $1"; shift
+    done
+    [ -n "$done_list" ] || usage ;;
   --print-range)
     [ $# -eq 3 ] || usage
     [ -f "$2" ] || die "no such plan file: $2" 2
@@ -154,6 +165,20 @@ plan=$1
 [ -f "$plan" ] || die "no such plan file: $plan" 2
 root=$(git -C "$(dirname "$plan")" rev-parse --show-toplevel 2>/dev/null) \
   || die "$plan is not inside a git repository — Files: paths resolve against the repo root" 2
+
+# ---- --done mode --------------------------------------------------------------
+
+if [ "$mode" = "done" ]; then
+  attested=$(printf '%s\n' $done_list | sort -un | tr '\n' ' ')
+  attested=${attested% }
+  present=$(task_headings "$plan")
+  for n in $attested; do
+    printf '%s\n' "$present" | grep -qx "$n" \
+      || die "no 'Task $n' heading in $plan" 2
+  done
+  flip_tasks
+  exit "$rc"
+fi
 
 # ---- ledger mode --------------------------------------------------------------
 
