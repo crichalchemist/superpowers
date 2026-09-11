@@ -15,7 +15,7 @@
 # "Fence model — stated limits". Parity with task-brief is the standard.
 set -euo pipefail
 
-die() { echo "sdd-checkoff: $*" >&2; exit "${2:-3}"; }
+die() { echo "sdd-checkoff: $*" >&2; exit 3; }
 
 # --print-range prints one task's range, for parity testing against task-brief.
 if [ "${1:-}" = "--print-range" ]; then
@@ -83,6 +83,8 @@ done
 
 tmp=$(mktemp "$(dirname "$plan")/.sdd-checkoff.XXXXXX")
 cp -p "$plan" "$tmp"
+# Beside the plan, not in shared temp: the leak test scans this directory, and a
+# bare mktemp in /var/folders made that test flaky under concurrent temp churn.
 countfile=$(mktemp "$(dirname "$plan")/.sdd-checkoff-count.XXXXXX")
 trap 'rm -f "$tmp" "$countfile"' EXIT
 
