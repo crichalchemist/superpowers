@@ -282,6 +282,23 @@ touch_in "$r" tests/third_test.txt
 ( cd "$r" && "$CHECKOFF" docs/superpowers/plans/pred.md >/dev/null 2>&1 ); rc=$?
 if [ "$rc" = "0" ] && grep -q '^- \[x\] \*\*Step 1: epsilon' "$p"; then pass "rerun after the path exists flips the task, exit 0"; else fail "rerun after the path exists flips the task, exit 0 (rc=$rc)"; fi
 
+# --- 20b. ledgered task with two missing paths joins them with a comma on stderr ---
+r=$(new_repo)
+cat > "$r/docs/superpowers/plans/twomissing.md" <<'PLAN'
+# Two Missing Plan
+
+### Task 1: First
+
+**Files:**
+- Create: `src/c.txt`
+- Create: `src/d.txt`
+
+- [ ] **Step 1: alpha**
+PLAN
+write_ledger "$r" twomissing "Task 1: complete (commits 1111111..2222222, review clean)"
+err=$( cd "$r" && "$CHECKOFF" docs/superpowers/plans/twomissing.md 2>&1 >/dev/null ); rc=$?
+if [ "$rc" = "4" ] && printf '%s\n' "$err" | grep -q 'Task 1: missing: src/c.txt, src/d.txt'; then pass "missing paths are joined with a comma on stderr"; else fail "missing paths are joined with a comma on stderr: $err"; fi
+
 # --- 21. ledgered task with no Files lines is refused, exit 4, plan untouched ---
 r=$(new_repo)
 cat > "$r/docs/superpowers/plans/nofiles.md" <<'PLAN'
@@ -314,6 +331,24 @@ touch_in "$r" src/existing.txt; touch_in "$r" src/other.txt
 write_ledger "$r" suffix "Task 1: complete (commits 1111111..2222222, review clean)"
 ( cd "$r" && "$CHECKOFF" docs/superpowers/plans/suffix.md >/dev/null 2>&1 ); rc=$?
 if [ "$rc" = "0" ] && [ "$(boxes_checked "$r/docs/superpowers/plans/suffix.md")" = "1" ]; then pass "line-range suffix is stripped before the existence check"; else fail "line-range suffix is stripped before the existence check (rc=$rc)"; fi
+
+# --- 22b. Comma-separated line-reference suffix is stripped before the existence check ---
+r=$(new_repo)
+cat > "$r/docs/superpowers/plans/commasuffix.md" <<'PLAN'
+# Comma Suffix Plan
+
+### Task 1: First
+
+**Files:**
+- Modify: `src/existing.txt:149,486`
+- Modify: `src/other.txt:31,33-37`
+
+- [ ] **Step 1: alpha**
+PLAN
+touch_in "$r" src/existing.txt; touch_in "$r" src/other.txt
+write_ledger "$r" commasuffix "Task 1: complete (commits 1111111..2222222, review clean)"
+( cd "$r" && "$CHECKOFF" docs/superpowers/plans/commasuffix.md >/dev/null 2>&1 ); rc=$?
+if [ "$rc" = "0" ] && [ "$(boxes_checked "$r/docs/superpowers/plans/commasuffix.md")" = "1" ]; then pass "comma-separated line-reference suffix is stripped before the existence check"; else fail "comma-separated line-reference suffix is stripped before the existence check (rc=$rc)"; fi
 
 # --- 23. Files lines inside a fence are ignored ---
 # The fixture's fence is built from a variable so this plan file itself never

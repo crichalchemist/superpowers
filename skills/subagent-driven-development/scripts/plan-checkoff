@@ -50,7 +50,7 @@ task_files() {  # PLAN N
     !infence && /^#+[ \t]+Task[ \t]+[0-9]+/ { intask = ($0 ~ ("^#+[ \t]+Task[ \t]+" n "([^0-9]|$)")) }
     intask && !infence && /^- (Create|Modify|Test): `[^`]+`/ {
       p = $0; sub(/^- (Create|Modify|Test): `/, "", p); sub(/`.*$/, "", p)
-      sub(/:[0-9]+(-[0-9]+)?$/, "", p); print p
+      sub(/:[0-9]+(-[0-9]+)?(,[0-9]+(-[0-9]+)?)*$/, "", p); print p
     }
   ' "$1"
 }
@@ -70,7 +70,7 @@ verify_task() {
   paths=$(task_files "$plan" "$n")
   if [ -z "$paths" ]; then VERDICT=nofiles; return 0; fi
   while IFS= read -r p; do
-    [ -e "$root/$p" ] || missing="$missing $p"
+    [ -e "$root/$p" ] || missing="${missing:+$missing,} $p"
   done <<< "$paths"
   if [ -n "$missing" ]; then VERDICT="missing$missing"; else VERDICT=ok; fi
 }
