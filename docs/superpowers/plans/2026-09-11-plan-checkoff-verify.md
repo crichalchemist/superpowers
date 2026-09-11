@@ -32,8 +32,8 @@
 Pure rename, no behaviour change. The existing 23 assertions must pass unchanged at the end of this task.
 
 **Files:**
-- Modify: `skills/subagent-driven-development/scripts/sdd-checkoff` (renamed to `skills/subagent-driven-development/scripts/plan-checkoff`)
-- Modify: `tests/claude-code/test-sdd-checkoff.sh` (renamed to `tests/claude-code/test-plan-checkoff.sh`)
+- Create: `skills/subagent-driven-development/scripts/plan-checkoff`
+- Create: `tests/claude-code/test-plan-checkoff.sh`
 - Modify: `tests/claude-code/run-skill-tests.sh`
 - Modify: `skills/subagent-driven-development/SKILL.md:149,486`
 - Modify: `.claude/CLAUDE.md`
@@ -278,7 +278,7 @@ if [ "$rc" = "4" ]; then pass "Files lines inside a fence do not count as eviden
 - [ ] **Step 5: Run the tests to verify the new ones fail**
 
 Run: `bash tests/claude-code/test-plan-checkoff.sh`
-Expected: the pre-existing assertions pass; `missing Test path exits 4`, `task with a missing path is not flipped`, `missing path is named on stderr`, `task listing no files is refused…`, `refusal says unverified`, and `Files lines inside a fence…` fail (the old script flips everything and exits 0). `line-range suffix…` passes vacuously today; it is a regression guard.
+Expected: the pre-existing assertions pass; `missing Test path exits 4`, `task with a missing path is not flipped`, `missing path is named on stderr`, `task listing no files is refused…`, `refusal says unverified`, and `Files lines inside a fence…` fail (the old script flips everything and exits 0). `line-range suffix…`, `verified task still flips alongside a refused one`, and `rerun after the path exists flips the task, exit 0` pass vacuously today; they are regression guards.
 
 - [ ] **Step 6: Replace the script with the predicate-aware version**
 
@@ -693,7 +693,7 @@ if [ "$rc" = "0" ]; then pass "--verify ignores tasks with no ticked box"; else 
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `bash tests/claude-code/test-plan-checkoff.sh`
-Expected: tests 31–33 fail (`--verify` is a usage error today, exit 2); test 34 passes vacuously and is a regression guard. Everything else passes.
+Expected: tests 31–34 fail (`--verify` is a usage error today, exit 2). Everything else passes.
 
 - [ ] **Step 3: Add the mode**
 
