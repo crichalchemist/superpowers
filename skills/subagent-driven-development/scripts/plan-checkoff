@@ -5,6 +5,7 @@
 # Attestation, never inference:
 #   plan-checkoff PLAN_FILE                    SDD: tasks the ledger marks complete
 #   plan-checkoff --done N [N ...] PLAN_FILE   executing-plans: tasks the caller names
+#   plan-checkoff --verify PLAN_FILE           audit: every ticked task must verify; writes nothing
 #   plan-checkoff --print-range PLAN_FILE N    debug/parity: print one task's range
 #
 # A task verifies when every path in its Files: block (unfenced lines of the
@@ -16,7 +17,7 @@
 # Exit codes: 0 every attested task verified and flipped (or nothing to do)
 #             2 usage, missing plan, --done task absent from the plan, plan outside a git repository
 #             3 ledger refused (foreign, malformed, names an absent task)
-#             4 one or more attested tasks not flipped; others still processed
+#             4 one or more attested tasks not flipped, or --verify found a ticked task that fails; others still processed
 #
 # Fence handling is byte-identical to task-brief's toggle. That model does not
 # understand ~~~, indented, or >=4-backtick nested fences; see the spec's
@@ -29,6 +30,7 @@ say() { echo "plan-checkoff: $*" >&2; }
 usage() {
   echo "usage: plan-checkoff PLAN_FILE" >&2
   echo "       plan-checkoff --done N [N ...] PLAN_FILE" >&2
+  echo "       plan-checkoff --verify PLAN_FILE" >&2
   echo "       plan-checkoff --print-range PLAN_FILE TASK_NUMBER" >&2
   exit 2
 }
@@ -139,6 +141,7 @@ flip_tasks() {
 
 mode=ledger
 case "${1:-}" in
+  --verify) mode="verify"; shift ;;
   --done)
     mode="done"; shift
     done_list=""
@@ -177,6 +180,22 @@ if [ "$mode" = "done" ]; then
       || die "no 'Task $n' heading in $plan" 2
   done
   flip_tasks
+  exit "$rc"
+fi
+
+# ---- --verify mode ------------------------------------------------------------
+
+if [ "$mode" = "verify" ]; then
+  rc=0
+  # Process substitution, not a pipe: the loop must run in this shell so rc sticks.
+  while IFS= read -r n; do
+    verify_task "$n"
+    case "$VERDICT" in
+      ok) ;;
+      nofiles) say "verify: Task $n ticked but lists no files"; rc=4 ;;
+      missing*) say "verify: Task $n ticked but missing:${VERDICT#missing}"; rc=4 ;;
+    esac
+  done < <(ticked_tasks "$plan")
   exit "$rc"
 fi
 

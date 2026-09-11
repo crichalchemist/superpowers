@@ -389,6 +389,38 @@ r=$(new_repo); write_plan "$r" done7
 ( cd "$r" && "$CHECKOFF" --done two docs/superpowers/plans/done7.md >/dev/null 2>&1 ); rc=$?
 if [ "$rc" = "2" ]; then pass "--done rejects a non-numeric task"; else fail "--done rejects a non-numeric task (rc=$rc)"; fi
 
+# --- 31. --verify: ticked task with an absent Create path, exit 4, file unchanged ---
+r=$(new_repo); write_plan "$r" ver1
+p="$r/docs/superpowers/plans/ver1.md"
+( cd "$r" && "$CHECKOFF" --done 1 docs/superpowers/plans/ver1.md >/dev/null 2>&1 )
+rm "$r/src/alpha.txt"; before=$(cksum < "$p")
+err=$( cd "$r" && "$CHECKOFF" --verify docs/superpowers/plans/ver1.md 2>&1 >/dev/null ); rc=$?
+if [ "$rc" = "4" ] && [ "$before" = "$(cksum < "$p")" ]; then pass "--verify flags a ticked task whose path is gone, writes nothing"; else fail "--verify flags a ticked task whose path is gone, writes nothing (rc=$rc)"; fi
+if printf '%s\n' "$err" | grep -q 'verify: Task 1 ticked but missing: src/alpha.txt'; then pass "--verify names the missing path"; else fail "--verify names the missing path: $err"; fi
+
+# --- 32. --verify: ticked task that lists no files, exit 4 ---
+r=$(new_repo)
+cat > "$r/docs/superpowers/plans/ver2.md" <<'PLAN'
+# Verify No Files
+
+### Task 1: First
+
+- [x] **Step 1: hand-ticked long ago**
+PLAN
+err=$( cd "$r" && "$CHECKOFF" --verify docs/superpowers/plans/ver2.md 2>&1 >/dev/null ); rc=$?
+if [ "$rc" = "4" ] && printf '%s\n' "$err" | grep -q 'verify: Task 1 ticked but lists no files'; then pass "--verify flags a ticked task with no Files lines"; else fail "--verify flags a ticked task with no Files lines (rc=$rc): $err"; fi
+
+# --- 33. --verify: consistent plan is silent, exit 0 ---
+r=$(new_repo); write_plan "$r" ver3
+( cd "$r" && "$CHECKOFF" --done 1 2 docs/superpowers/plans/ver3.md >/dev/null 2>&1 )
+out=$( cd "$r" && "$CHECKOFF" --verify docs/superpowers/plans/ver3.md 2>&1 ); rc=$?
+if [ "$rc" = "0" ] && [ -z "$out" ]; then pass "--verify on a consistent plan is silent, exit 0"; else fail "--verify on a consistent plan is silent, exit 0 (rc=$rc out=$out)"; fi
+
+# --- 34. --verify: an unticked task is not audited even if its files are missing ---
+r=$(new_repo); write_plan "$r" ver4; rm "$r/src/gamma.txt"
+( cd "$r" && "$CHECKOFF" --verify docs/superpowers/plans/ver4.md >/dev/null 2>&1 ); rc=$?
+if [ "$rc" = "0" ]; then pass "--verify ignores tasks with no ticked box"; else fail "--verify ignores tasks with no ticked box (rc=$rc)"; fi
+
 # --- 11. usage / missing plan ---
 ( "$CHECKOFF" >/dev/null 2>&1 ); if [ "$?" = "2" ]; then pass "no args exits 2"; else fail "no args exits 2"; fi
 ( "$CHECKOFF" /nope/missing.md >/dev/null 2>&1 ); if [ "$?" = "2" ]; then pass "missing plan exits 2"; else fail "missing plan exits 2"; fi
