@@ -22,6 +22,24 @@ assert_status() {
   if [ "$1" -eq "$2" ]; then pass "$3"
   else fail "$3"; echo "    expected exit $2, got $1"; fi
 }
+assert_not_contains() {
+  if printf '%s' "$1" | grep -Fq -- "$2"; then fail "$3"; echo "    did not expect: $2"
+  else pass "$3"; fi
+}
+
+# Build a self-contained bin dir holding only the coreutils the engine needs,
+# symlinked by absolute path. Tests that must control what the engine finds on
+# PATH point PATH at one of these and nothing else — never at ":$PATH", which
+# would let the host's timeout/gtimeout leak in and skip the path under test.
+# `bash` is included because the stub CLIs start with `#!/usr/bin/env bash`.
+hermetic_bin() {
+  local dir=$1 util util_path
+  mkdir -p "$dir"
+  for util in bash cat head mktemp rm sleep tr wc; do
+    util_path=$(command -v "$util") || { echo "  [FAIL] hermetic_bin: no $util on PATH"; exit 1; }
+    ln -sf "$util_path" "$dir/$util"
+  done
+}
 
 # Stub CLI: echoes a marker plus everything it received as args, and brackets
 # any stdin it sees so "empty" is distinguishable (proves the engine closes stdin).
@@ -54,6 +72,16 @@ exit 0
 STUB
 chmod +x "$TEST_ROOT/silent-cli"
 
+# Stub CLI: forks a grandchild that would outlive a single-pid kill, records
+# its pid, then hangs so the timeout has to fire (process-group kill test).
+cat >"$TEST_ROOT/fork-cli" <<'STUB'
+#!/usr/bin/env bash
+sleep 60 &
+echo "$!" >"$GC_PIDFILE"
+sleep 60
+STUB
+chmod +x "$TEST_ROOT/fork-cli"
+
 echo "supercritic engine tests"
 
 # --- happy path: prints the review, passes focus+content through ---
@@ -73,19 +101,19 @@ assert_contains "$out" "hello-artifact" "piped content reaches the CLI prompt"
 # bracketed marker is "STDIN:[]" only when nothing leaked through:
 assert_contains "$out" "STDIN:[]" "engine closes the CLI's stdin (no leakage)"
 
-# --- missing conf: fail loud, exit 1 ---
+# --- missing conf: fail loud, exit 3 ---
 out=$(SUPERCRITIC_CONF="$TEST_ROOT/nope.conf" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
-assert_status "$rc" 1 "missing conf exits 1"
+assert_status "$rc" 3 "missing conf exits 3"
 assert_contains "$out" "no config" "missing conf message"
 
-# --- disabled conf: skip with exit 1 ---
+# --- disabled conf: skip with exit 3 ---
 cat >"$TEST_ROOT/dis.conf" <<CONF
 SUPERCRITIC_CMD=("$TEST_ROOT/echo-cli")
 SUPERCRITIC_ENABLED=0
 SUPERCRITIC_VERIFIED=1
 CONF
 out=$(SUPERCRITIC_CONF="$TEST_ROOT/dis.conf" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
-assert_status "$rc" 1 "disabled conf exits 1"
+assert_status "$rc" 3 "disabled conf exits 3"
 assert_contains "$out" "disabled" "disabled conf message"
 
 # --- CLI fails: surface non-zero ---
@@ -96,7 +124,7 @@ SUPERCRITIC_VERIFIED=1
 SUPERCRITIC_TIMEOUT=10
 CONF
 out=$(SUPERCRITIC_CONF="$TEST_ROOT/fail.conf" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
-assert_status "$rc" 1 "failing CLI exits 1"
+assert_status "$rc" 5 "failing CLI exits 5"
 assert_contains "$out" "exit 3" "failing CLI reports its exit code"
 
 # --- timeout: fail loud and FAST ---
@@ -109,18 +137,18 @@ CONF
 start=$(date +%s)
 out=$(SUPERCRITIC_CONF="$TEST_ROOT/slow.conf" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
 elapsed=$(( $(date +%s) - start ))
-assert_status "$rc" 1 "timeout exits 1"
+assert_status "$rc" 4 "timeout exits 4"
 assert_contains "$out" "timed out" "timeout message"
 if [ "$elapsed" -le 5 ]; then pass "timeout fires fast (<=5s)"; else fail "timeout too slow (${elapsed}s)"; fi
 
-# --- unverified conf: fail loud, exit 1 ---
+# --- unverified conf: fail loud, exit 3 ---
 cat >"$TEST_ROOT/unverified.conf" <<CONF
 SUPERCRITIC_CMD=("$TEST_ROOT/echo-cli")
 SUPERCRITIC_ENABLED=1
 SUPERCRITIC_VERIFIED=0
 CONF
 out=$(SUPERCRITIC_CONF="$TEST_ROOT/unverified.conf" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
-assert_status "$rc" 1 "unverified conf exits 1"
+assert_status "$rc" 3 "unverified conf exits 3"
 assert_contains "$out" "not verified" "unverified conf message"
 
 # --- setup lifecycle: SUPERCRITIC_SMOKE=1 bypasses ONLY the verified gate ---
@@ -131,17 +159,17 @@ assert_contains "$out" "REVIEW_MARKER" "smoke run reaches the CLI"
 
 # --- SUPERCRITIC_SMOKE must not override the enabled gate ---
 out=$(SUPERCRITIC_CONF="$TEST_ROOT/dis.conf" SUPERCRITIC_SMOKE=1 "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
-assert_status "$rc" 1 "SUPERCRITIC_SMOKE=1 still respects SUPERCRITIC_ENABLED=0"
+assert_status "$rc" 3 "SUPERCRITIC_SMOKE=1 still respects SUPERCRITIC_ENABLED=0"
 assert_contains "$out" "disabled" "smoke-on-disabled message"
 
-# --- empty SUPERCRITIC_CMD: fail loud, exit 1 ---
+# --- empty SUPERCRITIC_CMD: fail loud, exit 3 ---
 cat >"$TEST_ROOT/emptycmd.conf" <<CONF
 SUPERCRITIC_CMD=()
 SUPERCRITIC_ENABLED=1
 SUPERCRITIC_VERIFIED=1
 CONF
 out=$(SUPERCRITIC_CONF="$TEST_ROOT/emptycmd.conf" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
-assert_status "$rc" 1 "empty SUPERCRITIC_CMD exits 1"
+assert_status "$rc" 3 "empty SUPERCRITIC_CMD exits 3"
 assert_contains "$out" "SUPERCRITIC_CMD" "empty cmd message mentions SUPERCRITIC_CMD"
 
 # --- missing file: fail loud, exit 2 ---
@@ -167,7 +195,7 @@ SUPERCRITIC_VERIFIED=1
 CONF
 git -C "$TEST_ROOT/hostile-repo" add .superpowers/supercritic.conf
 out=$(cd "$TEST_ROOT/hostile-repo" && "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
-assert_status "$rc" 1 "tracked conf exits 1"
+assert_status "$rc" 3 "tracked conf exits 3"
 assert_contains "$out" "tracked by git" "tracked conf refusal message"
 
 # --- untracked conf inside a git repo: normal operation ---
@@ -185,8 +213,41 @@ assert_contains "$out" "REVIEW_MARKER" "untracked-conf run prints CLI output"
 
 # --- oversize content: refuse before exec (single-argv ~128 KiB cap on Linux) ---
 out=$(head -c 120000 /dev/zero | tr '\0' 'a' | SUPERCRITIC_CONF="$TEST_ROOT/ok2.conf" "$ENGINE" "f" - 2>&1) && rc=0 || rc=$?
-assert_status "$rc" 1 "oversize content exits 1"
+assert_status "$rc" 6 "oversize content exits 6"
 assert_contains "$out" "too large" "oversize content message"
+
+# --- oversize content made of NUL bytes is refused too ---
+# Command substitution discards NUL bytes, so a buffered string undercounts what
+# was actually read: 200000 NUL bytes measured as 0 and sailed past the cap,
+# handing the CLI an empty review section and exiting 0 — "nothing to address".
+# The gate must measure the bytes read, not the string they became.
+out=$(head -c 200000 /dev/zero | SUPERCRITIC_CONF="$TEST_ROOT/ok2.conf" "$ENGINE" "f" - 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 6 "oversize NUL content exits 6"
+assert_contains "$out" "too large" "oversize NUL content message"
+assert_not_contains "$out" "REVIEW_MARKER" "NUL stream is refused, never reviewed as empty"
+
+# --- undersize content containing NUL bytes is refused, not silently emptied ---
+# A bash variable cannot hold a NUL, so command substitution empties the document
+# and the CLI reviews nothing while exiting 0 — the same false "nothing to
+# address" signal the empty-CLI-output rule already refuses. Detected on the file
+# before the content is read into a variable, so the size gate is not the only
+# thing standing between a binary blob and a review of it.
+head -c 10000 /dev/zero > "$TEST_ROOT/nul.bin"
+out=$(SUPERCRITIC_CONF="$TEST_ROOT/ok2.conf" "$ENGINE" "f" "$TEST_ROOT/nul.bin" 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 6 "NUL file exits 6"
+assert_contains "$out" "NUL bytes" "NUL file message names NUL bytes"
+assert_not_contains "$out" "REVIEW_MARKER" "NUL file is refused before the CLI runs"
+
+out=$(head -c 10000 /dev/zero | SUPERCRITIC_CONF="$TEST_ROOT/ok2.conf" "$ENGINE" "f" - 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 6 "NUL stdin exits 6"
+assert_contains "$out" "NUL bytes" "NUL stdin message names NUL bytes"
+assert_not_contains "$out" "REVIEW_MARKER" "NUL stdin is refused before the CLI runs"
+
+# ...and a NUL-free text file is unaffected — the only file-source happy path.
+printf 'plain-file-content\n' > "$TEST_ROOT/plain.txt"
+out=$(SUPERCRITIC_CONF="$TEST_ROOT/ok2.conf" "$ENGINE" "f" "$TEST_ROOT/plain.txt" 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 0 "NUL-free text file still reviewed"
+assert_contains "$out" "plain-file-content" "text file content reaches the CLI prompt"
 
 # --- CLI exits 0 with no output: fail loud, not silent success ---
 cat >"$TEST_ROOT/silent.conf" <<CONF
@@ -196,8 +257,240 @@ SUPERCRITIC_VERIFIED=1
 SUPERCRITIC_TIMEOUT=10
 CONF
 out=$(SUPERCRITIC_CONF="$TEST_ROOT/silent.conf" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
-assert_status "$rc" 1 "empty CLI output exits 1"
+assert_status "$rc" 5 "empty CLI output exits 5"
 assert_contains "$out" "no output" "empty CLI output message"
+
+# --- bare SUPERCRITIC_CMD[0] is resolved through PATH once, out loud ---
+# A bare name resolves at run time, so a changed PATH would run a different
+# binary than the one approved at setup. The engine pins it and says so.
+# $BASH is the running interpreter's absolute path — avoids PATH lookup for bash.
+BARE_BIN="$TEST_ROOT/bare-bin"
+hermetic_bin "$BARE_BIN"
+cp "$TEST_ROOT/echo-cli" "$BARE_BIN/barecli"
+cat >"$TEST_ROOT/bare.conf" <<CONF
+SUPERCRITIC_CMD=(barecli)
+SUPERCRITIC_ENABLED=1
+SUPERCRITIC_VERIFIED=1
+SUPERCRITIC_TIMEOUT=10
+CONF
+out=$(printf 'x' | PATH="$BARE_BIN" SUPERCRITIC_CONF="$TEST_ROOT/bare.conf" \
+  "$BASH" "$ENGINE" "f" - 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 0 "bare SUPERCRITIC_CMD resolves and runs"
+assert_contains "$out" "resolved barecli -> $BARE_BIN/barecli" "resolution line names the absolute path"
+assert_contains "$out" "REVIEW_MARKER" "resolved bare name reaches the CLI"
+
+# --- bare name that resolves to nothing: fail loud, do not run anything ---
+cat >"$TEST_ROOT/unresolvable.conf" <<CONF
+SUPERCRITIC_CMD=(no-such-supercritic-cli)
+SUPERCRITIC_ENABLED=1
+SUPERCRITIC_VERIFIED=1
+SUPERCRITIC_TIMEOUT=10
+CONF
+out=$(PATH="$BARE_BIN" SUPERCRITIC_CONF="$TEST_ROOT/unresolvable.conf" \
+  "$BASH" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 3 "unresolvable SUPERCRITIC_CMD exits 3"
+assert_contains "$out" "not found on PATH" "unresolvable cmd message"
+
+# --- a name that resolves to something that is not an executable file ---
+# `command -v echo` returns "echo", not a path: the array expansion would run
+# the shell builtin, which echoes the prompt straight back and reads to the
+# caller as a completed review. A function name behaves the same way. Both must
+# refuse rather than produce a fake review.
+cat >"$TEST_ROOT/builtin.conf" <<CONF
+SUPERCRITIC_CMD=(echo)
+SUPERCRITIC_ENABLED=1
+SUPERCRITIC_VERIFIED=1
+SUPERCRITIC_TIMEOUT=10
+CONF
+out=$(PATH="$BARE_BIN" SUPERCRITIC_CONF="$TEST_ROOT/builtin.conf" \
+  "$BASH" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 3 "builtin SUPERCRITIC_CMD exits 3"
+assert_contains "$out" "executable file" "builtin cmd message"
+assert_not_contains "$out" "READ-ONLY review" "builtin never echoes the prompt back as a review"
+
+cat >"$TEST_ROOT/function.conf" <<CONF
+myreviewer() { echo fake; }
+SUPERCRITIC_CMD=(myreviewer)
+SUPERCRITIC_ENABLED=1
+SUPERCRITIC_VERIFIED=1
+SUPERCRITIC_TIMEOUT=10
+CONF
+out=$(PATH="$BARE_BIN" SUPERCRITIC_CONF="$TEST_ROOT/function.conf" \
+  "$BASH" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 3 "function SUPERCRITIC_CMD exits 3"
+assert_contains "$out" "executable file" "function cmd message"
+
+# --- an absolute SUPERCRITIC_CMD[0] is already pinned: no resolution line ---
+out=$(printf 'x' | SUPERCRITIC_CONF="$conf" "$ENGINE" "f" - 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 0 "absolute SUPERCRITIC_CMD still works"
+assert_not_contains "$out" "resolved" "absolute SUPERCRITIC_CMD prints no resolution line"
+
+# --- bash timeout fallback: kills the grandchild too, not just the CLI ---
+# PATH is the hermetic bin dir ALONE, so neither timeout nor gtimeout is
+# findable and the bash fallback is the path actually under test.
+FB_BIN="$TEST_ROOT/fb-bin"
+hermetic_bin "$FB_BIN"
+cat >"$TEST_ROOT/fb.conf" <<CONF
+SUPERCRITIC_CMD=("$TEST_ROOT/fork-cli")
+SUPERCRITIC_ENABLED=1
+SUPERCRITIC_VERIFIED=1
+SUPERCRITIC_TIMEOUT=1
+CONF
+GC_PIDFILE="$TEST_ROOT/gc.pid"
+rm -f "$GC_PIDFILE"
+start=$(date +%s)
+out=$(PATH="$FB_BIN" GC_PIDFILE="$GC_PIDFILE" SUPERCRITIC_CONF="$TEST_ROOT/fb.conf" \
+  "$BASH" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
+elapsed=$(( $(date +%s) - start ))
+assert_status "$rc" 4 "timeout fallback exits 4"
+assert_contains "$out" "timed out" "timeout fallback message"
+if [ "$elapsed" -le 5 ]; then pass "timeout fallback fires fast (<=5s)"; else fail "timeout fallback too slow (${elapsed}s)"; fi
+sleep 1
+gc_pid=$(cat "$GC_PIDFILE" 2>/dev/null || true)
+if [ -n "$gc_pid" ]; then pass "fork stub recorded its grandchild pid"
+else fail "fork stub recorded its grandchild pid"; fi
+if [ -n "$gc_pid" ] && ! kill -0 "$gc_pid" 2>/dev/null; then pass "fallback kills the forked grandchild too"
+else fail "fallback kills the forked grandchild too"; kill -KILL "$gc_pid" 2>/dev/null || true; fi
+
+# --- oversize FILE is refused ---
+# A 200 MB sparse file. `oversize file exits 6` is the discriminating
+# assertion: the old code ran `cat` into a variable first, command substitution
+# stripped every NUL, `content` came back empty and the guard never fired at
+# all — rc 0 before the fix, rc 6 after. Deliberately no timing assertion here:
+# reading a sparse file of NULs is cheap (measured 0-2s for 200 MB, 1s for
+# 1 GiB), so elapsed time cannot tell the two implementations apart at any size
+# worth writing to a test disk.
+dd if=/dev/zero of="$TEST_ROOT/huge.bin" bs=1 count=0 seek=209715200 2>/dev/null
+out=$(SUPERCRITIC_CONF="$TEST_ROOT/ok2.conf" "$ENGINE" "f" "$TEST_ROOT/huge.bin" 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 6 "oversize file exits 6"
+assert_contains "$out" "too large" "oversize file message"
+
+# --- oversize STDIN is refused without draining the producer ---
+# `yes` never ends: if the engine reads to EOF this never returns.
+start=$(date +%s)
+out=$(yes AAAAAAAA | SUPERCRITIC_CONF="$TEST_ROOT/ok2.conf" "$ENGINE" "f" - 2>&1) && rc=0 || rc=$?
+elapsed=$(( $(date +%s) - start ))
+assert_status "$rc" 6 "oversize stdin exits 6"
+assert_contains "$out" "too large" "oversize stdin message"
+if [ "$elapsed" -le 5 ]; then pass "oversize stdin refused without draining the producer"; else fail "oversize stdin drained (${elapsed}s)"; fi
+
+# --- a stream whose byte MAX+1 is a newline is refused, not silently truncated ---
+# This is the trap the guard byte exists for. Command substitution strips
+# trailing newlines, so a bare `head -c MAX+1` followed by a byte count sees
+# exactly MAX bytes here, accepts the stream, drops everything after the
+# newline, and reviews a truncated document with exit 0.
+out=$( { head -c 100000 /dev/zero | tr '\0' 'a'; printf '\nTAIL_AFTER_THE_BOUNDARY\n'; } \
+  | SUPERCRITIC_CONF="$TEST_ROOT/ok2.conf" "$ENGINE" "f" - 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 6 "newline at the cap boundary exits 6"
+assert_not_contains "$out" "REVIEW_MARKER" "boundary stream is refused, never reviewed truncated"
+
+# --- a hung git must not hang the engine ---
+# The tracked-conf check protects against a hostile clone, so a git that never
+# answers means we cannot prove the conf is untracked: refuse, do not proceed.
+GIT_BIN="$TEST_ROOT/git-bin"
+hermetic_bin "$GIT_BIN"
+cat >"$GIT_BIN/git" <<'STUB'
+#!/usr/bin/env bash
+sleep 30
+STUB
+chmod +x "$GIT_BIN/git"
+start=$(date +%s)
+out=$(PATH="$GIT_BIN" SUPERCRITIC_CONF="$TEST_ROOT/ok2.conf" \
+  "$BASH" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
+elapsed=$(( $(date +%s) - start ))
+assert_status "$rc" 3 "hung git check exits 3"
+assert_contains "$out" "timed out" "hung git check message"
+if [ "$elapsed" -le 15 ]; then pass "hung git check gives up in ~10s"; else fail "hung git check took ${elapsed}s"; fi
+
+# --- a git that fails in any unrecognised way must fail CLOSED ---
+# Only rc 1 (untracked) and 128 (not a repo) prove the conf is safe to source.
+# Anything else — a broken git, a failing `timeout` itself — leaves the question
+# open, and an open question about sourcing attacker bash means refuse.
+BADGIT_BIN="$TEST_ROOT/badgit-bin"
+hermetic_bin "$BADGIT_BIN"
+cat >"$BADGIT_BIN/git" <<'STUB'
+#!/usr/bin/env bash
+exit 125
+STUB
+chmod +x "$BADGIT_BIN/git"
+out=$(PATH="$BADGIT_BIN" SUPERCRITIC_CONF="$TEST_ROOT/ok2.conf" \
+  "$BASH" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 3 "unrecognised git result exits 3"
+assert_contains "$out" "git tracked-conf check failed (exit 125)" "unrecognised git result message"
+assert_not_contains "$out" "REVIEW_MARKER" "unrecognised git result never sources the conf"
+
+# --- SUPERCRITIC_TIMEOUT must be a positive integer ---
+# 0 is the dangerous one: GNU timeout reads it as "no limit", so the CLI runs
+# unbounded and the SAFETY INVARIANT's "always timeout-guarded" stops being
+# true — a disabled guard, not a guard that happened not to fire. A non-numeric
+# value produced a different exit code on each host's timeout binary.
+cat >"$TEST_ROOT/zerotimeout.conf" <<CONF
+SUPERCRITIC_CMD=("$TEST_ROOT/echo-cli")
+SUPERCRITIC_ENABLED=1
+SUPERCRITIC_VERIFIED=1
+SUPERCRITIC_TIMEOUT=0
+CONF
+out=$(SUPERCRITIC_CONF="$TEST_ROOT/zerotimeout.conf" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 3 "SUPERCRITIC_TIMEOUT=0 exits 3"
+assert_contains "$out" "positive integer" "zero timeout message"
+assert_not_contains "$out" "REVIEW_MARKER" "zero timeout never runs the CLI unguarded"
+
+cat >"$TEST_ROOT/badtimeout.conf" <<CONF
+SUPERCRITIC_CMD=("$TEST_ROOT/echo-cli")
+SUPERCRITIC_ENABLED=1
+SUPERCRITIC_VERIFIED=1
+SUPERCRITIC_TIMEOUT=abc
+CONF
+out=$(SUPERCRITIC_CONF="$TEST_ROOT/badtimeout.conf" "$ENGINE" "f" - <<<"x" 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 3 "non-numeric SUPERCRITIC_TIMEOUT exits 3"
+assert_contains "$out" "positive integer" "non-numeric timeout message"
+
+# --- the timeout watcher must not leak its own sleep ---
+# Killing the watcher subshell does not kill the `sleep` it is blocked on, so
+# every fallback run — including successful ones — left a sleep alive for the
+# whole timeout window, holding the engine's stdin open with it. The watcher's
+# sleep is observable hermetically: `sleep` is resolved through the test's own
+# bin dir, so a shim there records its pid before exec'ing the real one.
+WATCH_BIN="$TEST_ROOT/watch-bin"
+hermetic_bin "$WATCH_BIN"
+SLEEP_LOG="$TEST_ROOT/sleep.log"
+rm -f "$SLEEP_LOG"
+REAL_SLEEP=$(command -v sleep)
+rm -f "$WATCH_BIN/sleep"   # hermetic_bin left a symlink here; writing through it would hit the real binary
+cat >"$WATCH_BIN/sleep" <<STUB
+#!/usr/bin/env bash
+echo "\$\$ \$*" >>"$SLEEP_LOG"
+exec "$REAL_SLEEP" "\$@"
+STUB
+chmod +x "$WATCH_BIN/sleep"
+# The CLI takes ~1s so the watcher definitely reaches its `sleep $secs` before
+# the engine finishes — otherwise the watcher dies before forking it and the
+# recording assertion below would pass for the wrong reason.
+cat >"$TEST_ROOT/slowish-cli" <<'STUB'
+#!/usr/bin/env bash
+sleep 1
+echo "REVIEW_MARKER"
+STUB
+chmod +x "$TEST_ROOT/slowish-cli"
+cat >"$TEST_ROOT/watcher.conf" <<CONF
+SUPERCRITIC_CMD=("$TEST_ROOT/slowish-cli")
+SUPERCRITIC_ENABLED=1
+SUPERCRITIC_VERIFIED=1
+SUPERCRITIC_TIMEOUT=47
+CONF
+out=$(printf 'x' | PATH="$WATCH_BIN" SUPERCRITIC_CONF="$TEST_ROOT/watcher.conf" \
+  "$BASH" "$ENGINE" "f" - 2>&1) && rc=0 || rc=$?
+assert_status "$rc" 0 "fast CLI through the fallback still succeeds"
+assert_contains "$out" "REVIEW_MARKER" "fast fallback run prints the review"
+sleep 1
+watcher_sleep_pid=$(awk '$2 == 47 { print $1; exit }' "$SLEEP_LOG" 2>/dev/null || true)
+if [ -n "$watcher_sleep_pid" ]; then pass "watcher's own sleep was recorded"
+else fail "watcher's own sleep was recorded"; fi
+if [ -n "$watcher_sleep_pid" ] && ! kill -0 "$watcher_sleep_pid" 2>/dev/null; then
+  pass "watcher leaves no orphaned sleep behind"
+else
+  fail "watcher leaves no orphaned sleep behind"; kill -KILL "$watcher_sleep_pid" 2>/dev/null || true
+fi
 
 if [ "$FAILURES" -gt 0 ]; then echo "$FAILURES supercritic engine test(s) failed"; exit 1; fi
 echo "All supercritic engine tests passed"

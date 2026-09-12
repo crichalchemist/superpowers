@@ -11,11 +11,28 @@
 #   <producer> | scripts/supercritic.sh "<focus>" -   # review piped text (e.g. a diff)
 #
 # Config: sources $SUPERCRITIC_CONF (default: ./.superpowers/supercritic.conf).
-# Must set SUPERCRITIC_CMD as a bash array, e.g. SUPERCRITIC_CMD=(agy --print).
+# Must set SUPERCRITIC_CMD as a bash array whose first element is the absolute
+# path to the CLI, e.g. SUPERCRITIC_CMD=(/abs/path/to/agy --print).
 # May set SUPERCRITIC_ENABLED (1/0), SUPERCRITIC_VERIFIED (1/0),
 # SUPERCRITIC_TIMEOUT (seconds, default 120), SUPERCRITIC_MODEL (informational).
 # SUPERCRITIC_SMOKE=1 (env, never conf) bypasses only the VERIFIED gate so
 # setup's smoke test can run through this engine before VERIFIED is set to 1.
+#
+# Exit codes:
+#   0  review printed
+#   2  usage error, the named source file does not exist, or the engine could
+#      not create the temporary file it measures piped input in
+#   3  feature off or mis-set — no conf, disabled, unverified, conf tracked by
+#      git, the git tracked-conf check unable to prove otherwise, a
+#      SUPERCRITIC_CMD that is empty or does not resolve to an executable file,
+#      a SUPERCRITIC_TIMEOUT that is not a positive integer. A caller should
+#      treat this as "skip", not "broken".
+#   4  the supercritic CLI timed out (a CLI that exits 124, 137 or 143 of its
+#      own accord is indistinguishable from this and reports as 4)
+#   5  the CLI exited non-zero, or exited 0 with no output
+#   6  content refused: too large, or containing NUL bytes, which a bash
+#      variable cannot hold — a binary diff would be reviewed as an empty
+#      document
 #
 # SAFETY INVARIANT (do not change): reviews go through inline content only — the
 # CLI sees only the text we pass, so the review is read-only by construction. No
@@ -25,7 +42,48 @@
 # CLI fails loud, never hangs.
 set -euo pipefail
 
-die() { echo "supercritic: $*" >&2; exit 1; }
+die() { echo "supercritic: $1" >&2; exit "$2"; }
+
+# Portable timeout: GNU timeout, gtimeout (macOS coreutils), or a bash fallback.
+run_with_timeout() {
+  local secs=$1; shift
+  if command -v timeout >/dev/null 2>&1; then
+    timeout -k 5 "$secs" "$@" </dev/null
+  elif command -v gtimeout >/dev/null 2>&1; then
+    gtimeout -k 5 "$secs" "$@" </dev/null
+  else
+    # Fallback: run the CLI in its own process group (set -m) so the watcher can
+    # signal the WHOLE group. A CLI that forks a long-lived grandchild would
+    # otherwise outlive a kill aimed at its pid alone — and that grandchild
+    # inherits our stdout, so it holds the output pipe open and stalls the
+    # caller's capture long past the timeout.
+    local pid watcher rc=0
+    set -m
+    "$@" </dev/null &
+    pid=$!
+    # The watcher is started under `set -m` too, so it leads its own process
+    # group and can be group-killed on the way out. Killing the subshell alone
+    # orphans the `sleep` it is blocked on, which then holds our stdin open for
+    # the rest of the timeout window — on every run, successful ones included.
+    # Its output goes to /dev/null: when the engine's output is being captured,
+    # an orphan holding that pipe would stall the capture.
+    # TERM then KILL after the same 5-second grace the GNU path uses. Each kill
+    # signals the group and then the pid alone, so a platform where `set -m`
+    # does not give the job its own group degrades to a single-pid kill rather
+    # than silently killing nothing at all.
+    (
+      sleep "$secs"
+      kill -TERM -- -"$pid" 2>/dev/null; kill -TERM "$pid" 2>/dev/null
+      sleep 5
+      kill -KILL -- -"$pid" 2>/dev/null; kill -KILL "$pid" 2>/dev/null
+    ) >/dev/null 2>&1 &
+    watcher=$!
+    set +m
+    wait "$pid" 2>/dev/null || rc=$?
+    kill -TERM -- -"$watcher" 2>/dev/null || kill -TERM "$watcher" 2>/dev/null || true
+    return "$rc"
+  fi
+}
 
 if [ $# -lt 2 ]; then
   echo "usage: $0 \"<focus>\" <file|->" >&2
@@ -35,40 +93,109 @@ focus=$1
 src=$2
 
 conf=${SUPERCRITIC_CONF:-.superpowers/supercritic.conf}
-[ -f "$conf" ] || die "no config at $conf (run detect-supercritic.sh and configure first)"
+[ -f "$conf" ] || die "no config at $conf (run detect-supercritic.sh and configure first)" 3
 # Sourcing executes the conf. A conf tracked by git could arrive in a hostile
 # clone and run attacker bash the first time a consume hook fires. Legit confs
 # are always untracked (setup step 5 gitignores .superpowers/), so refuse.
-if command -v git >/dev/null 2>&1 && git ls-files --error-unmatch -- "$conf" >/dev/null 2>&1; then
-  die "$conf is tracked by git — refusing to source it (a committed conf can execute arbitrary code; untrack it and gitignore .superpowers/)"
+# A hung git (network filesystem, an index lock held elsewhere) must not hang
+# the engine, so the check is itself timeout-guarded. This is an ALLOWLIST, not
+# a denylist: only rc 1 (untracked) and 128 (not a git repo) prove the conf is
+# safe to source. Every other result — a timeout, a broken git, `timeout` itself
+# failing — leaves the question open, and an open question about sourcing
+# attacker bash from a hostile clone means refuse.
+if command -v git >/dev/null 2>&1; then
+  git_rc=0
+  run_with_timeout 10 git ls-files --error-unmatch -- "$conf" >/dev/null 2>&1 || git_rc=$?
+  case "$git_rc" in
+    0) die "$conf is tracked by git — refusing to source it (a committed conf can execute arbitrary code; untrack it and gitignore .superpowers/)" 3 ;;
+    1 | 128) ;;
+    124 | 137 | 143) die "git tracked-conf check timed out after 10s — refusing to source $conf (cannot prove it is untracked; untrack it and gitignore .superpowers/)" 3 ;;
+    *) die "git tracked-conf check failed (exit $git_rc) — refusing to source $conf (cannot prove it is untracked; untrack it and gitignore .superpowers/)" 3 ;;
+  esac
 fi
 # shellcheck source=/dev/null
 . "$conf"
 
-[ "${SUPERCRITIC_ENABLED:-0}" = "1" ] || die "supercritic disabled in $conf"
+[ "${SUPERCRITIC_ENABLED:-0}" = "1" ] || die "supercritic disabled in $conf" 3
 if [ "${SUPERCRITIC_SMOKE:-0}" != "1" ]; then
-  [ "${SUPERCRITIC_VERIFIED:-0}" = "1" ] || die "supercritic not verified in $conf (smoke test never passed)"
+  [ "${SUPERCRITIC_VERIFIED:-0}" = "1" ] || die "supercritic not verified in $conf (smoke test never passed)" 3
 fi
 # SUPERCRITIC_CMD is set by the sourced conf above; shellcheck cannot follow the source.
 # shellcheck disable=SC2154
 if ! declare -p SUPERCRITIC_CMD >/dev/null 2>&1 || [ "${#SUPERCRITIC_CMD[@]}" -lt 1 ]; then
-  die "SUPERCRITIC_CMD not set as a non-empty bash array in $conf"
+  die "SUPERCRITIC_CMD not set as a non-empty bash array in $conf" 3
 fi
-timeout_secs=${SUPERCRITIC_TIMEOUT:-120}
+# A bare name in SUPERCRITIC_CMD resolves through $PATH at run time, so a PATH
+# change between setup and now would silently run a different binary than the
+# one the user approved. Pin it once, out loud, before the CLI can run.
+case "${SUPERCRITIC_CMD[0]}" in
+  */*) ;;
+  *)
+    resolved=$(command -v -- "${SUPERCRITIC_CMD[0]}") \
+      || die "SUPERCRITIC_CMD[0] '${SUPERCRITIC_CMD[0]}' not found on PATH (put the absolute path detect-supercritic.sh reported into $conf)" 3
+    # `command -v` answers about shell words, not only binaries: for a builtin
+    # or a function it prints the bare name, and for an alias it prints the
+    # whole `alias x='…'` definition, which contains a slash and would sail past
+    # a "does it look like a path" test. Only an executable file is a CLI we can
+    # hand a prompt to — anything else would run the shell's own `echo` and
+    # return the prompt as though it were a review.
+    [ -x "$resolved" ] || die "SUPERCRITIC_CMD[0] '${SUPERCRITIC_CMD[0]}' does not resolve to an executable file (put the absolute path detect-supercritic.sh reported into $conf)" 3
+    echo "supercritic: resolved ${SUPERCRITIC_CMD[0]} -> $resolved" >&2
+    SUPERCRITIC_CMD[0]=$resolved
+    ;;
+esac
 
-if [ "$src" = "-" ]; then
-  content=$(cat)
-else
-  [ -f "$src" ] || { echo "supercritic: no such file: $src" >&2; exit 2; }
-  content=$(cat "$src")
-fi
+timeout_secs=${SUPERCRITIC_TIMEOUT:-120}
+# Validate before use: GNU timeout reads 0 as "no limit", so an unvalidated 0
+# switches the SAFETY INVARIANT's timeout guard off entirely and the CLI runs
+# unbounded. A non-numeric value produced a different exit code depending on
+# which timeout binary the host had. Both are config errors — say so, exit 3.
+case "$timeout_secs" in
+  '' | *[!0-9]* | 0) die "SUPERCRITIC_TIMEOUT must be a positive integer of seconds (got '$timeout_secs')" 3 ;;
+esac
 
 # The prompt travels as ONE exec argument; Linux caps a single argument at
-# ~128 KiB (MAX_ARG_STRLEN). Bound well below the cap and fail loud.
-content_bytes=$(( $(printf '%s' "$content" | wc -c) ))
-if [ "$content_bytes" -gt 100000 ]; then
-  die "content too large (${content_bytes} bytes > 100000) — narrow the diff or split the review"
+# ~128 KiB (MAX_ARG_STRLEN). Bound well below the cap and fail loud — and check
+# the size BEFORE buffering, so an oversize source is refused, never read whole.
+MAX_BYTES=100000
+if [ "$src" = "-" ]; then
+  # Read at most MAX_BYTES+1 so an oversize stream is refused without being
+  # drained, and measure it on disk. A buffered string cannot be measured
+  # honestly: command substitution discards NUL bytes, so 200000 NUL bytes
+  # counted as zero, sailed past the cap, and reached the CLI as an empty
+  # review section — which reads back as "review done, nothing to address".
+  # The temp file is the engine's own scratch: the CLI is still handed inline
+  # content and never a path, so the SAFETY INVARIANT above is unchanged.
+  tmp=$(mktemp "${TMPDIR:-/tmp}/supercritic.XXXXXX") \
+    || die "cannot create a temporary file to measure piped input" 2
+  # `|| :` so a failed cleanup cannot overwrite the exit code the contract promises.
+  trap 'rm -f "$tmp" || :' EXIT
+  head -c "$(( MAX_BYTES + 1 ))" >"$tmp"
+  source_path=$tmp
+  source_bytes=$(( $(wc -c < "$tmp") ))
+  if [ "$source_bytes" -gt "$MAX_BYTES" ]; then
+    die "content too large (more than ${MAX_BYTES} bytes) — narrow the diff or split the review" 6
+  fi
+else
+  [ -f "$src" ] || { echo "supercritic: no such file: $src" >&2; exit 2; }
+  source_path=$src
+  source_bytes=$(( $(wc -c < "$src") ))
+  if [ "$source_bytes" -gt "$MAX_BYTES" ]; then
+    die "content too large (${source_bytes} bytes > ${MAX_BYTES}) — narrow the diff or split the review" 6
+  fi
 fi
+# Size is not the only way content can be unreviewable. A bash variable cannot
+# hold a NUL, so the `cat` below would hand the CLI an emptied document and a
+# review of nothing would exit 0 — the same false "nothing to address" signal
+# the empty-CLI-output rule refuses further down. Compare the bytes on disk with
+# the bytes that survive NUL removal: any difference is binary content. Checked
+# on the file, before anything reaches command substitution, so the CLI never
+# runs and bash never prints its own "ignored null byte" warning.
+text_bytes=$(( $(tr -d '\000' < "$source_path" | wc -c) ))
+if [ "$text_bytes" -ne "$source_bytes" ]; then
+  die "content contains NUL bytes ($(( source_bytes - text_bytes )) of ${source_bytes}) and cannot be reviewed as text — pass a text diff, not a binary one" 6
+fi
+content=$(cat "$source_path")
 
 prompt=$(cat <<EOF
 You are doing a READ-ONLY review. Do not ask follow-up questions; produce the review directly.
@@ -82,38 +209,15 @@ ${content}
 EOF
 )
 
-# Portable timeout: GNU timeout, gtimeout (macOS coreutils), or a bash fallback.
-run_with_timeout() {
-  local secs=$1; shift
-  if command -v timeout >/dev/null 2>&1; then
-    timeout -k 5 "$secs" "$@" </dev/null
-  elif command -v gtimeout >/dev/null 2>&1; then
-    gtimeout -k 5 "$secs" "$@" </dev/null
-  else
-    # Fallback: TERM hits the launched process. If a CLI forks a long-lived
-    # grandchild, that child may outlive the kill — prefer real `timeout`/`gtimeout`.
-    "$@" </dev/null &
-    local pid=$!
-    # Watcher must not inherit our stdout: when the engine's output is being
-    # captured, an orphaned sleep holding the pipe would stall the capture.
-    ( sleep "$secs"; kill -TERM "$pid" 2>/dev/null ) >/dev/null 2>&1 &
-    local watcher=$!
-    local rc=0
-    wait "$pid" 2>/dev/null || rc=$?
-    kill -TERM "$watcher" 2>/dev/null || true
-    return "$rc"
-  fi
-}
-
 rc=0
 review=$(run_with_timeout "$timeout_secs" "${SUPERCRITIC_CMD[@]}" "$prompt") || rc=$?
 if [ "$rc" -ne 0 ]; then
   # 124 = GNU timeout; 137 = 128+SIGKILL (timeout -k); 143 = 128+SIGTERM from the bash fallback.
   if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ] || [ "$rc" -eq 143 ]; then
-    die "supercritic CLI timed out after ${timeout_secs}s (check SUPERCRITIC_CMD invocation)"
+    die "supercritic CLI timed out after ${timeout_secs}s (check SUPERCRITIC_CMD invocation)" 4
   fi
-  die "supercritic CLI failed (exit $rc)"
+  die "supercritic CLI failed (exit $rc)" 5
 fi
 # An empty review exiting 0 would read as "nothing to address" — fail loud instead.
-[ -n "$review" ] || die "supercritic CLI exited 0 but produced no output (check SUPERCRITIC_CMD invocation)"
+[ -n "$review" ] || die "supercritic CLI exited 0 but produced no output (check SUPERCRITIC_CMD invocation)" 5
 printf '%s\n' "$review"

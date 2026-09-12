@@ -28,11 +28,18 @@ For each task:
 1. Mark as in_progress
 2. Follow each step exactly (plan has bite-sized steps)
 3. Run verifications as specified
-4. Mark as completed
+4. Mark as completed — the todo, and the plan file: run
+   `../subagent-driven-development/scripts/plan-checkoff --done N PLAN_FILE`
+   (path relative to this skill's directory) for the task you just finished.
+   Exit 4 means a path the task's `Files:` block names does not exist yet, or
+   the task lists none: the task is not done — fix what is missing, then rerun.
 
 ### Step 3: Complete Development
 
 After all tasks complete and verified:
+- Run `../subagent-driven-development/scripts/plan-checkoff --verify PLAN_FILE`;
+  a non-zero exit lists ticked tasks whose deliverables are missing — resolve
+  them before going on.
 - Announce: "I'm using the finishing-a-development-branch skill to complete this work."
 - **REQUIRED SUB-SKILL:** Use superpowers:finishing-a-development-branch
 - Follow that skill to verify tests, present options, execute choice
