@@ -8,7 +8,7 @@ contributor guidelines in the root `CLAUDE.md` still govern anything sent to obr
 Every run that produces a ledger or an equivalent record leaves a tracked copy in
 `docs/superpowers/ledgers/`.
 
-- **SDD runs.** At teardown, after `scripts/sdd-checkoff PLAN_FILE` and before the workspace
+- **SDD runs.** At teardown, after `scripts/plan-checkoff PLAN_FILE` and before the workspace
   under `.superpowers/sdd/<plan-basename>/` is deleted, copy into
   `docs/superpowers/ledgers/<plan-basename>/`: `progress.md` (always), the final whole-branch
   review, and any task report or re-review files that exist. Briefs and review packages are

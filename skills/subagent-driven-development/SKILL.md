@@ -137,7 +137,9 @@ a ledger file, not only in todos.
   `scripts/sdd-workspace PLAN_FILE` — it prints the plan's git-ignored
   directory (`<repo-root>/.superpowers/sdd/<plan-basename>/`), home to
   every artifact for THIS plan: ledger, briefs, reports, review packages.
-  Another plan's directory is never yours to read or write.
+  Another plan's directory is never yours to read or write. Then run
+  `scripts/active-plan set PLAN_FILE`, which names this plan to the
+  task-completion check-off hook.
 - Check for this plan's ledger at `<workspace>/progress.md`. If its first
   line names your plan file, tasks with a `Task <N>: complete` line are DONE
   — do not re-dispatch them; resume at the first task without one. A task
@@ -146,7 +148,7 @@ a ledger file, not only in todos.
   ledger at the old flat path `.superpowers/sdd/progress.md` — is another
   plan's progress: leave it in place and start your own, fresh.
 - Reconcile the plan's checkboxes from the ledger before dispatching: run this
-  skill's `scripts/sdd-checkoff PLAN_FILE`. On a fresh plan it exits 0 and does
+  skill's `scripts/plan-checkoff PLAN_FILE`. On a fresh plan it exits 0 and does
   nothing; after an aborted run it checks off the tasks the ledger recorded, so
   the tracked plan file stops lying about what is done.
 - Create the ledger with its identity as the first line:
@@ -157,8 +159,11 @@ a ledger file, not only in todos.
 - `git clean -fdx` will destroy the workspace (it's git-ignored scratch); if
   that happens, recover from `git log`.
 
-Read the plan once, note its context and Global Constraints, and create a
-todo per task. If the plan names a Spec, read that too: the spec is the
+Read the plan once, note its context and Global Constraints, and create one
+task per plan task with TaskCreate, subject exactly the plan's heading,
+`Task N: <name>`, so the check-off hook can match it. (Claude 5 models need
+`CLAUDE_CODE_ENABLE_TODO_TOOLS=1` in a settings `env` block for the Task
+tools to exist.) If the plan names a Spec, read that too: the spec is the
 authority the plan argues from, and conflicts inside the plan resolve
 against it. A plan with no reachable spec gets a ledger note saying so —
 rulings made without one are provisional.
@@ -442,9 +447,12 @@ message as your other bookkeeping:
 - `Task <N>: complete (commits <base7>..<head7>, <K> parked)` after a
   tripped breaker
 
-Then mark the todo complete and move on. Never move to the next task while
-the review has open Critical/Important issues that are neither fixed nor
-parked-with-ruling at the cap.
+Then mark the task complete and move on. On Claude Code the completion runs
+`plan-checkoff --done N` through a hook; if the hook refuses, the task stays
+open and the `missing:` or `unverified` line says why, whatever the review
+said. Never move to the next task while the review has open
+Critical/Important issues that are neither fixed nor parked-with-ruling at
+the cap.
 
 ## Final Review
 
@@ -483,14 +491,18 @@ took on your human partner's behalf reach them — they read it and rework
 whatever you got wrong. A ruling that dies with the workspace was a decision
 made in secret.
 
-Before deleting the workspace, run `scripts/sdd-checkoff PLAN_FILE` one last
-time — deletion destroys the ledger, so this is the last moment the plan's
-checkboxes can be reconciled from it. Inspect the resulting `git diff` of the
+Before deleting the workspace, run `scripts/plan-checkoff PLAN_FILE` one last
+time, then `scripts/active-plan clear` — deletion destroys the ledger, so
+this is the last moment the plan's checkboxes can be reconciled from it.
+Inspect the resulting `git diff` of the
 plan before committing: the script cannot detect a plan whose quoted
 fixtures put fences inside fences, and a box flipped inside quoted content
 is a corruption to revert by hand. Commit the reconciled plan — the
 check-off dirties a tracked file, and finishing-a-development-branch refuses
 to remove a dirty worktree.
+An exit of 4 means a ledgered task's `Files:` block names a path that does
+not exist, or lists no files at all — either the task is not done or the plan
+is wrong about it; resolve that before deleting the workspace, then rerun.
 
 When the final whole-branch review is clean and its fixes are merged,
 delete this plan's workspace (`rm -rf <workspace>`) — the git history is

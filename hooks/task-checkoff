@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# TaskCompleted hook: when the completed task's subject is a plan heading,
+# "Task N: <name>", run plan-checkoff --done N for it. A refused check-off
+# (exit 4: a Files: path is missing, or the task lists none) exits 2, which
+# makes Claude Code keep the task open and show the refusal to the model.
+#
+# Everything else exits 0 and lets the completion proceed: no marker, an
+# input we cannot parse, a subject that is not a plan heading, a heading whose
+# name differs, an already-ticked task, or a broken plan-checkoff. The hook
+# never holds a task hostage for a reason the agent cannot fix.
+#
+# Input: the TaskCompleted JSON on stdin; only "cwd" and "task_subject" are read.
+# The plan comes from <repo-root>/.superpowers/sdd/active-plan (see
+# skills/subagent-driven-development/scripts/active-plan).
+set -uo pipefail
+
+input=$(cat)
+
+# field NAME -> the string value of "NAME":"..." with \" and \\ unescaped; empty if absent.
+# -E (POSIX extended regex): BSD sed (macOS) has no \| alternation extension in BRE.
+field() {
+  printf '%s' "$input" \
+    | sed -E -n 's/.*"'"$1"'":"(([^"\\]|\\.)*)".*/\1/p' \
+    | head -n 1 \
+    | sed 's/\\"/"/g; s/\\\\/\\/g'
+}
+
+cwd=$(field cwd)
+subject=$(field task_subject)
+[ -n "$cwd" ] && [ -n "$subject" ] || exit 0
+
+root=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || exit 0
+marker="$root/.superpowers/sdd/active-plan"
+[ -f "$marker" ] || exit 0
+plan=$(head -n 1 "$marker")
+[ -f "$plan" ] || exit 0
+
+case "$subject" in
+  Task\ [0-9]*|task\ [0-9]*) ;;
+  *) exit 0 ;;
+esac
+n=$(printf '%s' "$subject" | sed -n 's/^[Tt]ask \([0-9][0-9]*\):\{0,1\}.*/\1/p')
+name=$(printf '%s' "$subject" | sed -n 's/^[Tt]ask [0-9][0-9]*:\{0,1\}[[:space:]]*\(.*\)$/\1/p')
+[ -n "$n" ] || exit 0
+
+# The plan's own heading text for Task N, unfenced, fence toggle as in plan-checkoff.
+heading=$(awk -v n="$n" '
+  /^```/ { infence = !infence; next }
+  !infence && $0 ~ ("^#+[ \t]+Task[ \t]+" n "([^0-9]|$)") {
+    sub(/^#+[ \t]+Task[ \t]+[0-9]+:?[ \t]*/, ""); print; exit
+  }
+' "$plan")
+[ -n "$heading" ] || exit 0
+
+# normalise: lower-case, trim, collapse internal whitespace.
+norm() {
+  printf '%s' "$1" | tr '[:upper:]' '[:lower:]' \
+    | sed 's/^[[:space:]]*//; s/[[:space:]]*$//; s/[[:space:]][[:space:]]*/ /g'
+}
+[ "$(norm "$name")" = "$(norm "$heading")" ] || exit 0
+
+plugin_root=${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}
+checkoff="$plugin_root/skills/subagent-driven-development/scripts/plan-checkoff"
+if [ ! -x "$checkoff" ]; then
+  echo "task-checkoff: plan-checkoff not executable at $checkoff" >&2
+  exit 0
+fi
+
+out=$("$checkoff" --done "$n" "$plan" 2>&1); rc=$?
+case "$rc" in
+  0) exit 0 ;;
+  4)
+    refusal=$(printf '%s\n' "$out" | grep 'not flipped' || printf '%s\n' "$out")
+    printf '%s\n' "$refusal" >&2
+    exit 2 ;;
+  *)
+    echo "task-checkoff: plan-checkoff exited $rc for Task $n in $plan" >&2
+    exit 0 ;;
+esac

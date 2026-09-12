@@ -20,7 +20,11 @@ Load plan, review critically, execute all tasks, report when complete.
 2. Read plan file
 3. Review critically - identify any questions or concerns about the plan
 4. If concerns: Raise them with your human partner before starting
-5. If no concerns: Create todos for the plan items and proceed
+5. If no concerns: create one task per plan task with TaskCreate, subject
+   exactly the plan's heading, `Task N: <name>`; run
+   `../subagent-driven-development/scripts/active-plan set PLAN_FILE`; proceed.
+   (Claude 5 models need `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` in a settings
+   `env` block for the Task tools to exist.)
 
 ### Step 2: Execute Tasks
 
@@ -28,11 +32,21 @@ For each task:
 1. Mark as in_progress
 2. Follow each step exactly (plan has bite-sized steps)
 3. Run verifications as specified
-4. Mark as completed
+4. Mark as completed — the task, and the plan file: run
+   `../subagent-driven-development/scripts/plan-checkoff --done N PLAN_FILE`
+   (path relative to this skill's directory) for the task you just finished.
+   Exit 4 means a path the task's `Files:` block names does not exist yet, or
+   the task lists none: the task is not done — fix what is missing, then rerun.
+   Marking the task complete runs the same check-off through a hook on Claude
+   Code; a refused completion means the task is not done.
 
 ### Step 3: Complete Development
 
 After all tasks complete and verified:
+- Run `../subagent-driven-development/scripts/plan-checkoff --verify PLAN_FILE`;
+  a non-zero exit lists ticked tasks whose deliverables are missing — resolve
+  them before going on. Then run `../subagent-driven-development/scripts/active-plan clear`
+  and commit the plan file with the check-off.
 - Announce: "I'm using the finishing-a-development-branch skill to complete this work."
 - **REQUIRED SUB-SKILL:** Use superpowers:finishing-a-development-branch
 - Follow that skill to verify tests, present options, execute choice
