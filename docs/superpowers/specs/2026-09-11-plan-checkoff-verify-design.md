@@ -48,7 +48,8 @@ intended cost, since an unverifiable tick is exactly the decoration #2237 warns 
 **D3 — Verification is a mode, not a side effect.** `--verify` audits without writing: every task
 with at least one ticked box must satisfy its predicate, and a ticked task that lists no files is
 reported as `unverified` (a hand-tick from before this change, or a Files block removed later).
-It exits non-zero listing each offending task. Both skills run it at final review.
+It exits non-zero listing each offending task. executing-plans runs it at final review;
+SDD's teardown reconcile covers the same ground from the ledger.
 
 **D4 — No hand-written completion markers.** The ticked boxes are the record and the script is the
 only writer. Agents never add headers, footers, or status lines to tasks. A document-level status
@@ -91,8 +92,8 @@ Within a task's range (as defined by the earlier spec) and outside fences, a Fil
 ^- (Create|Modify|Test): `([^`]+)`
 ```
 
-The captured path has any trailing `:<digits>-<digits>` or `:<digits>` line reference removed.
-Anything else in the block is ignored. The block is recognised only by these lines; the
+The captured path has any trailing line reference removed: `:<digits>`, `:<digits>-<digits>`,
+or a comma-separated list of those. Anything else in the block is ignored. The block is recognised only by these lines; the
 `**Files:**` heading itself is not required, so plans that drifted from the template still get
 checked wherever they kept the tag lines. A task with zero matching lines is "lists no files".
 
@@ -101,7 +102,7 @@ checked wherever they kept the tag lines. A task with zero matching lines is "li
 | Code | Meaning |
 |---|---|
 | 0 | every attested task verified and flipped (or nothing to do) |
-| 2 | usage, missing plan file, `--done` with a task number the plan does not contain |
+| 2 | usage, missing plan file, `--done` with a task number the plan does not contain, plan outside a git repository |
 | 3 | refusal: foreign or inconsistent ledger (unchanged from the earlier spec) |
 | 4 | one or more attested tasks were not flipped: a listed path is missing, or the task lists no files; the others were still processed |
 
@@ -123,6 +124,10 @@ reads the missing paths, fixes or explains, and reruns.
   SDD this means a ledgered-complete task with no Files lines blocks the teardown reconcile with
   exit 4 until the plan's task gains its Files block; the controller edits the plan, reruns, and
   the tick lands. Older plans are retrofitted task by task the same way, never by a sweep.
+- **Renamed or deleted paths cannot be listed.** The predicate proves presence only; a task whose
+  deliverable is a rename or deletion lists the paths that exist after it, not the ones it removed.
+- **Paths are repo-relative and not contained.** `..` segments and leading `/` are not rejected;
+  plans are first-party. Known limit.
 
 ## Call sites
 
