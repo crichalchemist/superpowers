@@ -12,6 +12,17 @@
           }
         ]
       }
+    ],
+    "TaskCompleted": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd\" task-checkoff",
+            "shell": "bash"
+          }
+        ]
+      }
     ]
   }
 }
