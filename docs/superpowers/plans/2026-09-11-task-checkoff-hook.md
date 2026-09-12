@@ -39,7 +39,7 @@ The spec's "Verified harness contract" section was measured by hand on 2026-09-1
 **Interfaces:**
 - Produces: a manual probe (not part of any suite) whose exit 0 means: the session had the Task tools, the `TaskCompleted` hook fired with `task_subject` in its stdin, and exit 2 left the task `pending`. Prints the recorded stdin and the model's report.
 
-- [ ] **Step 1: Write the probe**
+- [x] **Step 1: Write the probe**
 
 ```bash
 #!/usr/bin/env bash
@@ -113,17 +113,17 @@ check "allowed task completed"            'printf "%s" "$report" | grep -Eq "\[c
 exit "$status"
 ```
 
-- [ ] **Step 2: Make it executable and lint it**
+- [x] **Step 2: Make it executable and lint it**
 
 Run: `chmod +x tests/hooks/probe-task-completed.sh && shellcheck --severity=warning tests/hooks/probe-task-completed.sh`
 Expected: no output.
 
-- [ ] **Step 3: Run it once against the installed harness**
+- [x] **Step 3: Run it once against the installed harness**
 
 Run: `tests/hooks/probe-task-completed.sh`
 Expected: seven `[PASS]` lines, exit 0. Copy the `=== hook stdin ===` block into your report. If any check fails, stop: the spec's contract section is wrong for this version, and the controller must rule before Task 3 is built.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tests/hooks/probe-task-completed.sh
@@ -142,7 +142,7 @@ git commit -m "test(hooks): manual probe of the TaskCompleted hook contract"
 **Interfaces:**
 - Produces: `active-plan set PLAN_FILE` (writes `<root>/.superpowers/sdd/active-plan`, prints the absolute plan path, exit 0; exit 2 on a missing plan or outside git), `active-plan clear` (removes the marker, exit 0 always), `active-plan show` (prints the marker's line, exit 0; exit 1 with no output when absent). Root for `set` is the repository containing the plan; for `clear`/`show` the repository containing the caller's directory. Task 3's hook reads the marker file directly.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/claude-code/test-active-plan.sh`:
 
@@ -214,12 +214,12 @@ if [ "$failures" -eq 0 ]; then echo "All active-plan tests passed"; exit 0; fi
 echo "$failures active-plan test(s) failed"; exit 1
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `bash tests/claude-code/test-active-plan.sh`
 Expected: every assertion `[FAIL]` (the script does not exist; each invocation exits 127), final line `9 active-plan test(s) failed`, exit 1.
 
-- [ ] **Step 3: Write the script**
+- [x] **Step 3: Write the script**
 
 Create `skills/subagent-driven-development/scripts/active-plan`:
 
@@ -275,17 +275,17 @@ esac
 
 Then: `chmod +x skills/subagent-driven-development/scripts/active-plan`
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `bash tests/claude-code/test-active-plan.sh`
 Expected: 9 `[PASS]`, `All active-plan tests passed`, exit 0.
 
-- [ ] **Step 5: Lint**
+- [x] **Step 5: Lint**
 
 Run: `shellcheck --severity=warning skills/subagent-driven-development/scripts/active-plan tests/claude-code/test-active-plan.sh`
 Expected: no output.
 
-- [ ] **Step 6: Wire the test into the runner**
+- [x] **Step 6: Wire the test into the runner**
 
 In `tests/claude-code/run-skill-tests.sh`, the `tests=(…)` array (lines 78–83) gains one entry directly after `"test-plan-checkoff.sh"`:
 
@@ -293,7 +293,7 @@ In `tests/claude-code/run-skill-tests.sh`, the `tests=(…)` array (lines 78–8
     "test-active-plan.sh"
 ```
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add skills/subagent-driven-development/scripts/active-plan tests/claude-code/test-active-plan.sh tests/claude-code/run-skill-tests.sh
@@ -313,7 +313,7 @@ git commit -m "feat(sdd): active-plan marker names the plan a session is executi
 - Consumes: the marker file from Task 2 (`<root>/.superpowers/sdd/active-plan`, one absolute path); `plan-checkoff --done N PLAN` and its exit codes (0 flipped or nothing to flip, 2 usage, 3 workspace, 4 refused) and its stderr lines (`plan-checkoff: Task N: missing: <paths> — not flipped`, `plan-checkoff: Task N: unverified: lists no files — not flipped`).
 - Produces: `hooks/task-checkoff`, reading the `TaskCompleted` JSON on stdin; exit 2 with the refusal lines on stderr when the check-off is refused; exit 0 otherwise. Registered under `TaskCompleted` in `hooks/hooks.json`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/hooks/test-task-checkoff.sh`:
 
@@ -468,12 +468,12 @@ if [ "$failures" -eq 0 ]; then echo "All task-checkoff hook tests passed"; exit 
 echo "$failures task-checkoff hook test(s) failed"; exit 1
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `bash tests/hooks/test-task-checkoff.sh`
 Expected: every assertion `[FAIL]`. With no hook file, `bash "$HOOK"` exits 127 and prints "No such file" on stderr, so even the "silent exit 0" cases fail; the manifest assertion fails on the missing entry. Final line `15 task-checkoff hook test(s) failed`, exit 1.
 
-- [ ] **Step 3: Write the hook**
+- [x] **Step 3: Write the hook**
 
 Create `hooks/task-checkoff`:
 
@@ -560,7 +560,7 @@ esac
 
 Then: `chmod +x hooks/task-checkoff`
 
-- [ ] **Step 4: Register the hook**
+- [x] **Step 4: Register the hook**
 
 Replace `hooks/hooks.json` with:
 
@@ -597,12 +597,12 @@ Replace `hooks/hooks.json` with:
 
 `hooks/hooks-cursor.json` is not touched.
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `bash tests/hooks/test-task-checkoff.sh`
 Expected: 15 `[PASS]`, `All task-checkoff hook tests passed`, exit 0.
 
-- [ ] **Step 6: Lint and confirm the existing suites still pass**
+- [x] **Step 6: Lint and confirm the existing suites still pass**
 
 Run: `shellcheck --severity=warning hooks/task-checkoff tests/hooks/test-task-checkoff.sh`
 Expected: no output.
@@ -610,7 +610,7 @@ Expected: no output.
 Run: `bash tests/hooks/test-session-start.sh | tail -1 && bash tests/claude-code/test-plan-checkoff.sh | tail -1`
 Expected: both suites report all passed (the check-off suite stays at 52).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add hooks/task-checkoff hooks/hooks.json tests/hooks/test-task-checkoff.sh
@@ -630,7 +630,7 @@ Eight sentences across two skills. Every anchor is quoted from `plan-checkoff` a
 **Interfaces:**
 - Consumes: `scripts/active-plan set|clear` from Task 2; the hook's behaviour from Task 3 (a refused completion stays open and prints `missing:` or `unverified`).
 
-- [ ] **Step 1: Confirm the anchors**
+- [x] **Step 1: Confirm the anchors**
 
 Run:
 ```bash
@@ -644,7 +644,7 @@ grep -n 'plan-checkoff --verify PLAN_FILE' skills/executing-plans/SKILL.md
 ```
 Expected: one hit each (the second one is the line ending "…note its context and Global Constraints, and create a", immediately before "todo per task").
 
-- [ ] **Step 2: Edit subagent-driven-development/SKILL.md**
+- [x] **Step 2: Edit subagent-driven-development/SKILL.md**
 
 (a) The Setup workspace bullet currently reads:
 
@@ -695,7 +695,7 @@ time, then `scripts/active-plan clear` — deletion destroys the ledger, so
 this is the last moment the plan's checkboxes can be reconciled from it.
 ```
 
-- [ ] **Step 3: Edit executing-plans/SKILL.md**
+- [x] **Step 3: Edit executing-plans/SKILL.md**
 
 (a) Step 1 item 5, "5. If no concerns: Create todos for the plan items and proceed", becomes:
 
@@ -746,7 +746,7 @@ It becomes:
   and commit the plan file with the check-off.
 ```
 
-- [ ] **Step 4: Verify the edits are the whole diff**
+- [x] **Step 4: Verify the edits are the whole diff**
 
 Run: `git diff --stat`
 Expected: exactly the two SKILL.md files.
@@ -757,12 +757,12 @@ Expected: `0` (no protected content touched).
 Run: `git diff -U0 skills/subagent-driven-development/SKILL.md | grep -c '^@@'`
 Expected: `4` (four hunks, one per edit).
 
-- [ ] **Step 5: Run the skill and hook suites once more**
+- [x] **Step 5: Run the skill and hook suites once more**
 
 Run: `bash tests/hooks/test-task-checkoff.sh | tail -1 && bash tests/claude-code/test-active-plan.sh | tail -1 && bash tests/claude-code/test-plan-checkoff.sh | tail -1`
 Expected: three "All … passed" lines.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add skills/subagent-driven-development/SKILL.md skills/executing-plans/SKILL.md
