@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Name the plan a session is executing, so the task-completion check-off hook
+# (hooks/task-checkoff) knows which plan a completed "Task N: <name>" belongs to.
+#
+#   active-plan set PLAN_FILE   write <repo-root>/.superpowers/sdd/active-plan, print the absolute path
+#   active-plan clear           remove the marker; silent if absent
+#   active-plan show            print the marker's path; exit 1 if none
+#
+# One marker per repository root: two plans executing in the same working tree
+# race on it and the last `set` wins — the same limit the SDD ledger has.
+# The marker lives beside the SDD workspaces, under the self-ignoring
+# .superpowers/sdd/.gitignore that sdd-workspace also writes, so it never
+# appears in `git status`.
+#
+# Exit codes: 0 ok; 1 `show` with no marker; 2 usage, missing plan, or not in a git repository.
+set -euo pipefail
+
+usage() { echo "usage: active-plan set PLAN_FILE | clear | show" >&2; exit 2; }
+die() { echo "active-plan: $1" >&2; exit 2; }
+
+# root DIR -> repository root containing DIR
+root() { git -C "$1" rev-parse --show-toplevel 2>/dev/null || die "$1 is not inside a git repository"; }
+
+case "${1:-}" in
+  set)
+    [ $# -eq 2 ] || usage
+    [ -f "$2" ] || die "no such plan file: $2"
+    plan_dir=$(cd "$(dirname "$2")" && pwd)
+    abs="$plan_dir/$(basename "$2")"
+    base="$(root "$plan_dir")/.superpowers/sdd"
+    mkdir -p "$base"
+    printf '*\n' > "$base/.gitignore"
+    printf '%s\n' "$abs" > "$base/active-plan"
+    printf '%s\n' "$abs"
+    ;;
+  clear)
+    [ $# -eq 1 ] || usage
+    rm -f "$(root .)/.superpowers/sdd/active-plan"
+    ;;
+  show)
+    [ $# -eq 1 ] || usage
+    marker="$(root .)/.superpowers/sdd/active-plan"
+    [ -f "$marker" ] || exit 1
+    cat "$marker"
+    ;;
+  *) usage ;;
+esac
