@@ -35,7 +35,8 @@ case "${1:-}" in
     ;;
   clear)
     [ $# -eq 1 ] || usage
-    rm -f "$(root .)/.superpowers/sdd/active-plan"
+    top=$(git -C . rev-parse --show-toplevel 2>/dev/null) || exit 0
+    rm -f "$top/.superpowers/sdd/active-plan"
     ;;
   show)
     [ $# -eq 1 ] || usage

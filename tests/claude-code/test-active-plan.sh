@@ -52,13 +52,18 @@ if [ "$rc1" = "0" ] && [ "$rc2" = "0" ] && [ ! -e "$r/.superpowers/sdd/active-pl
 
 # --- 6. the marker never shows in git status ---
 r=$(new_repo)
-git -C "$r" add -A >/dev/null; git -C "$r" -c user.email=t@t -c user.name=t commit -qm init
+git -C "$r" add -A >/dev/null; git -C "$r" -c user.email=t@t -c user.name=t -c commit.gpgsign=false commit -qm init
 ( cd "$r" && "$ACTIVE" set docs/superpowers/plans/demo.md >/dev/null )
 if [ -z "$(git -C "$r" status --porcelain)" ]; then pass "marker is git-ignored"; else fail "marker is git-ignored ($(git -C "$r" status --porcelain | tr '\n' ' '))"; fi
 
 # --- 7. usage ---
 ( cd "$r" && "$ACTIVE" >/dev/null 2>&1 ); rc=$?
 if [ "$rc" = "2" ]; then pass "no arguments is a usage error, exit 2"; else fail "no arguments is a usage error, exit 2 (rc=$rc)"; fi
+
+# --- 8. clear outside a git repository is silent and exits 0 ---
+d=$(mktemp -d)
+err=$(cd "$d" && GIT_CEILING_DIRECTORIES="$d" "$ACTIVE" clear 2>&1 >/dev/null); rc=$?
+if [ "$rc" = "0" ] && [ -z "$err" ]; then pass "clear outside a git repository exits 0 with empty stderr"; else fail "clear outside a git repository exits 0 with empty stderr (rc=$rc err=$err)"; fi
 
 echo ""
 if [ "$failures" -eq 0 ]; then echo "All active-plan tests passed"; exit 0; fi

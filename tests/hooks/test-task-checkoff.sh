@@ -54,7 +54,7 @@ run_hook() {
   err=$(cat "$errf"); rm -f "$errf"
 }
 
-boxes_checked() { grep -c '^\s*- \[x\]' "$1" || true; }
+boxes_checked() { grep -c '^[[:space:]]*- \[x\]' "$1" || true; }
 plan_of() { echo "$1/docs/superpowers/plans/demo.md"; }
 activate() { ( cd "$1" && "$ACTIVE" set docs/superpowers/plans/demo.md >/dev/null ); }
 
@@ -142,6 +142,13 @@ errf=$(mktemp)
 payload='{"cwd":"'"$r"'","task_subject":"Task 1: First thing"}'
 out=$(printf '%s' "$payload" | CLAUDE_PLUGIN_ROOT="$REPO_ROOT" bash "$REPO_ROOT/hooks/run-hook.cmd" task-checkoff 2>"$errf"); rc=$?; rm -f "$errf"
 if [ "$rc" = "0" ] && [ "$(boxes_checked "$(plan_of "$r")")" = "2" ]; then pass "run-hook.cmd task-checkoff reaches the hook"; else fail "run-hook.cmd task-checkoff reaches the hook (rc=$rc)"; fi
+
+# --- 16. run-hook.cmd dispatches a refusal too: rc=2, missing on stderr ---
+rm "$r/src/alpha.txt"
+errf=$(mktemp)
+payload='{"cwd":"'"$r"'","task_subject":"Task 1: First thing"}'
+out=$(printf '%s' "$payload" | CLAUDE_PLUGIN_ROOT="$REPO_ROOT" bash "$REPO_ROOT/hooks/run-hook.cmd" task-checkoff 2>"$errf"); rc=$?; err=$(cat "$errf"); rm -f "$errf"
+if [ "$rc" = "2" ] && printf '%s' "$err" | grep -q 'missing: src/alpha.txt'; then pass "run-hook.cmd dispatches a refusal too"; else fail "run-hook.cmd dispatches a refusal too (rc=$rc err=$err)"; fi
 
 echo ""
 if [ "$failures" -eq 0 ]; then echo "All task-checkoff hook tests passed"; exit 0; fi
