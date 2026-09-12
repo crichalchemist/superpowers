@@ -1,0 +1,39 @@
+## subagent-driven-development / hook + both (rep-3, worker hb-sdd)
+toy: /private/tmp/rfj-agent-tests/csd-arm/rep-3-workdir
+unchecked boxes: 0
+checked boxes: 10
+exists: src/greet.sh
+exists: tests/test-greet.sh
+exists: src/shout.sh
+exists: tests/test-shout.sh
+commits on greeter: 3
+plan file committed clean: yes
+marker left behind: no
+tests: PASS greet PASS shout 
+--verify on the resulting plan:
+  verify rc=0
+skill base dirs seen in session:
+  Base directory for this skill: /Users/controlroom/.claude/jobs/9582e6cc/tmp/eval/plugin-both/skills/finishing-a-development-branch
+  Base directory for this skill: /Users/controlroom/.claude/jobs/9582e6cc/tmp/eval/plugin-both/skills/subagent-driven-development
+TaskCreate calls: 3
+TaskCreate subjects:
+  Task 1: greet.sh
+  Task 2: shout.sh
+TaskUpdate completions: 3
+Bash --done calls: 0
+Bash --verify calls: 0
+active-plan set/clear calls: 0 / 0
+hook refusals fed back (plan-checkoff: Task N: ... not flipped): 0
+plan-checkoff ledger-mode calls (plan as first arg, any quoting): 2
+active-plan set/clear calls (any quoting): 6 / 4
+session turns (user lines): 60
+
+timeline (jsonl line: event):
+  77: Bash active-plan set
+  204: TaskUpdate completed taskId 1
+  271: TaskUpdate completed taskId 2
+  319: Bash plan-checkoff (ledger mode)
+  320: ledger-mode result: checked off 0 task(s), 0 box(es) in docs
+  376: Bash plan-checkoff (ledger mode)
+  377: ledger-mode result: checked off 0 task(s), 0 box(es) in docs
+  403: TaskUpdate completed taskId 1

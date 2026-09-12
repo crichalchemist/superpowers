@@ -1,0 +1,4 @@
+hb-ep 66122cf0-2ba7-49e4-bff4-58040fc8338c rep-2 both ep
+hb-sdd 172fb092-0be7-47ec-b9f1-44ddf2ce594f rep-3 both sdd
+ha-ep c6171cfe-8863-4471-bf53-8540e0d3f332 rep-4 alone ep
+ha-sdd 10c0b447-c802-47e4-8fad-a7ad9851a09b rep-5 alone sdd
